@@ -89,7 +89,7 @@ export function SpinnerButton({
   return (
     <Comp
       className={cn(
-        "!whitespace-nowrap !overflow-hidden !relative !px-8 !min-w-fit !m-0",
+        "whitespace-nowrap! overflow-hidden! relative! px-8! min-w-fit! m-0!",
         buttonVariants({ variant, size, className }),
       )}
       disabled={disabled || isLoading}

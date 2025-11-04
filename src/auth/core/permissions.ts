@@ -1,4 +1,4 @@
-import type { Order, Product, User, UserRole } from "@/drizzle/schema";
+import type { Order, Product, Reservation, User, UserRole } from "@/drizzle/schema";
 
 type PartialUser = Pick<User, "id" | "email" | "role" | "screens">;
 type DefaultAction = "view" | "update" | "create" | "delete";
@@ -27,7 +27,11 @@ type Permissions = {
     users: {
         dataType: Partial<User>;
         action: DefaultAction;
-    }
+    };
+    reservations: {
+        dataType: Partial<Reservation>;
+        action: DefaultAction;
+    };
 };
 
 const unrestricted = {
@@ -42,6 +46,7 @@ const ROLES = {
         products: unrestricted,
         orders: unrestricted,
         users: unrestricted,
+        reservations: unrestricted,
     },
     user: {
         products: {
@@ -54,6 +59,7 @@ const ROLES = {
             update: (user, data) => user.id === data.id,
             delete: false,
         },
+        reservations: unrestricted,
     },
 } as const satisfies RolesWithPermissions;
 

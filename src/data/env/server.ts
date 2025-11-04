@@ -12,6 +12,9 @@ export const env = createEnv({
     OAUTH_REDIRECT_URL_BASE: z.string().url(),
     JWT_SECRET_KEY: z.string().min(32),
 
+    HUME_API_KEY: z.string().min(1),
+    HUME_API_SECRET: z.string().min(1),
+
     BASE_URL: z.url(),
     NODE_ENV: z
       .enum(["development", "test", "production"])

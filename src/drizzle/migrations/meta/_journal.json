@@ -50,6 +50,20 @@
       "when": 1762174649221,
       "tag": "0006_military_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762245297710,
+      "tag": "0007_giant_apocalypse",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1762251849816,
+      "tag": "0008_perfect_bushwacker",
+      "breakpoints": true
     }
   ]
 }

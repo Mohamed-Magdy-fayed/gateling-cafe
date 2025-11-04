@@ -1,0 +1,48 @@
+import { dt, type LanguageMessages } from "@/lib/i18n/lib";
+
+export default {
+    reservationsTranslations: {
+        customerName: "الاسم",
+        customerPhone: "الهاتف",
+        totalPrice: "السعر الكلي",
+        totalPricePlaceholder: "أدخل السعر الكلي",
+        totalPaid: "السعر المدفوع",
+        totalPaidPlaceholder: "أدخل السعر المدفوع",
+        startTime: "وقت البدء",
+        endTime: "وقت الانتهاء",
+        reservationCode: "كود الحجز",
+        reservation: "منتج",
+        reservations: "المنتجات",
+        status: "الحالة",
+        statuses: "الحالات",
+        statusNames: dt("{statusName:enum}", {
+            enum: {
+                statusName: {
+                    reserved: "محجوز",
+                    started: "بدأ",
+                    ended: "انتهى",
+                    cancelled: "ملغى",
+                }
+            }
+        }),
+        childPickupAnnouncement: dt(
+            "يرجى الانتباه، {customerName} جاهز للاستلام.",
+            {},
+        ),
+        childPickupToastTitle: dt(
+            "{customerName} جاهز للاستلام",
+            {},
+        ),
+        childPickupToastDescription: dt(
+            "انتهى حجز {customerName} عند {endTime:date}.",
+            {
+                date: {
+                    endTime: {
+                        hour: "numeric",
+                        minute: "2-digit",
+                    },
+                },
+            },
+        ),
+    },
+} as const satisfies LanguageMessages;

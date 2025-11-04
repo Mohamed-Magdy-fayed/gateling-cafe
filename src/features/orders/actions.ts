@@ -6,13 +6,13 @@ import { hasPermission } from "@/auth/core/permissions";
 import { getCurrentUser } from "@/auth/nextjs/get-current-user";
 import { db } from "@/drizzle";
 import {
-    CustomersTable,
     type Order,
     OrdersProductsTable,
     OrdersTable,
     orderStatuses,
     ProductsTable,
 } from "@/drizzle/schema";
+import { insertOrGetCustomer } from "@/features/helpers";
 import { generateOrderNumber } from "@/features/orders/utils";
 import { getT } from "@/lib/i18n/actions";
 import type { Option } from "@/types/data-table";
@@ -47,8 +47,6 @@ export async function generateOrderNumberAction() {
         .limit(1)
         .orderBy(desc(OrdersTable.orderNumber))
         .then((res) => res[0]);
-
-
 
     const todayCount = order?.orderNumber
         ? parseInt(order.orderNumber.split("-")[2] || "0")
@@ -104,7 +102,9 @@ export async function createOrder(
             .from(ProductsTable)
             .where(inArray(ProductsTable.id, uniqueProductIds));
 
-        const productMap = new Map(productRecords.map((product) => [product.id, product]));
+        const productMap = new Map(
+            productRecords.map((product) => [product.id, product]),
+        );
 
         if (productMap.size !== uniqueProductIds.length) {
             return {
@@ -142,43 +142,14 @@ export async function createOrder(
             Math.min(orderFields.totalPaid, computedOrderTotal),
         );
 
-        const existingCustomer = await db
-            .select()
-            .from(CustomersTable)
-            .where(eq(CustomersTable.phone, orderFields.customerPhone))
-            .then((res) => res[0]);
+        const { customer } = await insertOrGetCustomer({
+            createdBy: user.email,
+            customerName: orderFields.customerName,
+            customerPhone: orderFields.customerPhone,
+            totalSpent: computedOrderTotal,
+        });
 
         const order = await db.transaction(async (tx) => {
-            let customerId: string;
-
-            if (existingCustomer) {
-                await tx
-                    .update(CustomersTable)
-                    .set({
-                        totalSpent: existingCustomer.totalSpent + computedOrderTotal,
-                    })
-                    .where(eq(CustomersTable.id, existingCustomer.id));
-
-                customerId = existingCustomer.id;
-            } else {
-                const newCustomer = await tx
-                    .insert(CustomersTable)
-                    .values({
-                        name: orderFields.customerName || "Guest",
-                        phone: orderFields.customerPhone || "",
-                        totalSpent: computedOrderTotal,
-                        createdBy: user.email,
-                    })
-                    .returning()
-                    .then((res) => res[0]);
-
-                if (!newCustomer) {
-                    throw new Error("Failed to create customer");
-                }
-
-                customerId = newCustomer.id;
-            }
-
             const createdOrder = await tx
                 .insert(OrdersTable)
                 .values({
@@ -186,7 +157,7 @@ export async function createOrder(
                     orderTotal: computedOrderTotal,
                     totalPaid: safeTotalPaid,
                     createdBy: user.email,
-                    customerId,
+                    customerId: customer.id,
                     employeeId: user.id,
                 })
                 .returning()
@@ -272,7 +243,10 @@ export async function editOrders(
                 );
 
                 const productRecords = await tx
-                    .select({ id: ProductsTable.id, priceCents: ProductsTable.priceCents })
+                    .select({
+                        id: ProductsTable.id,
+                        priceCents: ProductsTable.priceCents,
+                    })
                     .from(ProductsTable)
                     .where(inArray(ProductsTable.id, uniqueProductIds));
 
@@ -317,7 +291,7 @@ export async function editOrders(
                 const requestedTotalPaid =
                     orderData.totalPaid !== undefined
                         ? orderData.totalPaid
-                        : currentTotals?.totalPaid ?? 0;
+                        : (currentTotals?.totalPaid ?? 0);
 
                 const safeTotalPaid = Math.max(
                     0,
@@ -340,7 +314,8 @@ export async function editOrders(
                         .where(eq(OrdersTable.id, orderId))
                         .then((res) => res[0]);
 
-                    const existingTotal = existingOrder?.orderTotal ?? orderData.totalPaid;
+                    const existingTotal =
+                        existingOrder?.orderTotal ?? orderData.totalPaid;
 
                     updatePayload.totalPaid = Math.max(
                         0,
@@ -393,7 +368,9 @@ export async function editOrders(
     }
 }
 
-export async function deleteOrders(ids: string[]): Promise<ServerActionResponse<number>> {
+export async function deleteOrders(
+    ids: string[],
+): Promise<ServerActionResponse<number>> {
     try {
         const user = await getCurrentUser({ redirectIfNotFound: true });
         if (!hasPermission(user, "orders", "delete")) {
@@ -415,7 +392,9 @@ export async function deleteOrders(ids: string[]): Promise<ServerActionResponse<
     }
 }
 
-export async function getStatusCounts(): Promise<ServerActionResponse<Option[]>> {
+export async function getStatusCounts(): Promise<
+    ServerActionResponse<Option[]>
+> {
     const user = await getCurrentUser({ redirectIfNotFound: true });
     if (!hasPermission(user, "orders", "view")) {
         return { error: true, message: "Unauthorized" };
@@ -463,7 +442,12 @@ export async function getOrderProducts(
     orderId: string,
 ): Promise<
     ServerActionResponse<
-        { productId: string; qty: number; unitPriceCents: number; lineTotalCents: number }[]
+        {
+            productId: string;
+            qty: number;
+            unitPriceCents: number;
+            lineTotalCents: number;
+        }[]
     >
 > {
     const user = await getCurrentUser({ redirectIfNotFound: true });

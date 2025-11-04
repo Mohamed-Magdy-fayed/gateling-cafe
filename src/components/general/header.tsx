@@ -52,6 +52,7 @@ export function Header() {
     { name: t("dashboard"), href: "/dashboard" },
     { name: t("productsTranslations.products"), href: "/products" },
     { name: t("ordersTranslations.orders"), href: "/orders" },
+    { name: t("reservations"), href: "/reservations" },
     { name: t("users"), href: "/users" },
   ].filter((screen) =>
     session.session?.user.screens.some((s) => screen.href.includes(s)),
