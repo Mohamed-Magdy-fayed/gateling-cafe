@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SaveIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import z from "zod";
@@ -36,7 +35,6 @@ export type UserFormValues = z.infer<typeof userFormSchema>;
 
 export function UsersForm({ user, setIsOpen }: { user?: User, setIsOpen: (isOpen: boolean) => void }) {
     const { t } = useTranslation();
-    const router = useRouter();
 
     const form = useForm<UserFormValues>({
         resolver: zodResolver(userFormSchema),
@@ -62,7 +60,6 @@ export function UsersForm({ user, setIsOpen }: { user?: User, setIsOpen: (isOpen
             toast.error(t("error", { error: resultUser.message }));
         } else {
             toast.success(t("success"));
-            router.refresh();
             setIsOpen(false);
         }
     }

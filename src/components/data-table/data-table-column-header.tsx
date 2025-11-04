@@ -8,7 +8,8 @@ import {
   EyeOff,
   X,
 } from "lucide-react";
-
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -16,10 +17,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface DataTableColumnHeaderProps<TData, TValue>
   extends React.ComponentProps<typeof DropdownMenuTrigger> {
@@ -43,11 +42,7 @@ export function DataTableColumnHeader<TData, TValue>({
     <DropdownMenu>
       <div className="flex items-center gap-2 justify-between px-2">
         {title}
-        <DropdownMenuTrigger
-          className={cn(className)}
-          asChild
-          {...props}
-        >
+        <DropdownMenuTrigger className={cn(className)} asChild {...props}>
           <Button variant="ghost" size="sm">
             {column.getCanSort() &&
               (column.getIsSorted() === "desc" ? (

@@ -1,7 +1,7 @@
 "use client";
 
-import { LogOutIcon, MenuIcon, XIcon } from "lucide-react";
-import Image from "next/image";
+import { CoffeeIcon, LogOutIcon, MenuIcon, XIcon } from "lucide-react";
+// import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
@@ -70,13 +70,14 @@ export function Header() {
         <div className="flex h-16 gap-4 items-center justify-between">
           {/* Logo with enhanced styling */}
           <div className="flex items-center gap-2">
-            <Image
+            {/* <Image
               src="/logo.png"
               alt="Logo"
               width={256}
               height={256}
               className="w-20 dark:invert"
-            />
+            /> */}
+            <CoffeeIcon size={32} className="text-primary-foreground bg-primary rounded-md p-1" />
             <H3 className="text-xl font-bold hidden md:inline">
               {t("appName")}
             </H3>

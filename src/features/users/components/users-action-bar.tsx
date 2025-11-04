@@ -51,6 +51,7 @@ export function UsersActionBar({ table }: UsersActionBarProps) {
         return;
       }
       table.toggleAllRowsSelected(false);
+      setCurrentAction(null);
       toast.success(t("success"));
       router.refresh();
     });

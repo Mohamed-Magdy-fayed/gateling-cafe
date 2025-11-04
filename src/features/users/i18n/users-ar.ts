@@ -8,12 +8,11 @@ export default {
         screens: "الشاشات",
         screenNames: {
             dashboard: "لوحة التحكم",
-            branches: "الفروع",
-            dresses: "الفساتين",
             users: "الموظفين",
-            reservations: "الحجوزات",
+            products: "المنتجات",
             customers: "العملاء",
-            settings: "الإعدادات",
+            orders: "الطلبات",
+            reservations: "الحجوزات",
         },
     },
 } as const satisfies LanguageMessages;

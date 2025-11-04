@@ -43,6 +43,13 @@
       "when": 1762026903295,
       "tag": "0005_handy_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762174649221,
+      "tag": "0006_military_tigra",
+      "breakpoints": true
     }
   ]
 }

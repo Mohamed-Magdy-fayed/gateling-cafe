@@ -8,6 +8,8 @@ import {
 export const OrdersProductsTable = pgTable("orders_products", {
     id,
     qty: integer().notNull(),
+    unitPriceCents: integer().notNull(),
+    lineTotalCents: integer().notNull(),
     orderId: varchar().references(() => OrdersTable.id, { onDelete: "cascade" }).notNull(),
     productId: varchar().references(() => ProductsTable.id, { onDelete: "cascade" }).notNull(),
 });

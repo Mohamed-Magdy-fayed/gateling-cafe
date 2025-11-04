@@ -1,7 +1,8 @@
 "Use client";
 
 import { Edit2Icon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { DataTableSheet } from "@/components/data-table/data-table-sheet";
 import { ModalSheetComponent } from "@/components/general/modal-sheet-compo";
 import { Button } from "@/components/ui/button";
@@ -23,9 +24,18 @@ export function UsersActions({ user }: { user: User }) {
 
     const [isUpdateOpen, setIsUpdateOpen] = useState(false);
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+    const [isPending, startTransition] = useTransition();
 
     async function handleDelete() {
-        deleteUsers([user.id]);
+        startTransition(async () => {
+            const { error } = await deleteUsers([user.id]);
+
+            if (error) {
+                toast.error(t("error", { error: "" }));
+                return;
+            }
+            setIsDeleteOpen(false);
+        });
     }
 
     return (
@@ -35,7 +45,11 @@ export function UsersActions({ user }: { user: User }) {
                 onOpenChange={(val) => setIsDeleteOpen(val)}
                 title={t("common.delete")}
                 description={t("common.areYouSure")}
-                content={<Button onClick={handleDelete}>{t("common.delete")}</Button>}
+                confirmButton={
+                    <Button disabled={isPending} onClick={handleDelete}>
+                        {t("common.delete")}
+                    </Button>
+                }
             />
             <DataTableSheet
                 isUpdate

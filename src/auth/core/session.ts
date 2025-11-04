@@ -62,7 +62,6 @@ export async function createSession(
       imageUrl: user.imageUrl,
       role: user.role,
       screens: user.screens,
-      branchId: user.branchId ?? null,
     },
   };
 

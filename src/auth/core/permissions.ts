@@ -1,6 +1,7 @@
 import type { Order, Product, User, UserRole } from "@/drizzle/schema";
 
 type PartialUser = Pick<User, "id" | "email" | "role" | "screens">;
+type DefaultAction = "view" | "update" | "create" | "delete";
 
 type PermissionCheck<Key extends keyof Permissions> =
     | boolean
@@ -17,12 +18,16 @@ type RolesWithPermissions = {
 type Permissions = {
     products: {
         dataType: Partial<Product>;
-        action: "view" | "update" | "create" | "delete";
+        action: DefaultAction;
     };
     orders: {
         dataType: Partial<Order>;
-        action: "view" | "update" | "create" | "delete";
+        action: DefaultAction;
     };
+    users: {
+        dataType: Partial<User>;
+        action: DefaultAction;
+    }
 };
 
 const unrestricted = {
@@ -36,12 +41,19 @@ const ROLES = {
     admin: {
         products: unrestricted,
         orders: unrestricted,
+        users: unrestricted,
     },
     user: {
         products: {
             view: true,
         },
         orders: unrestricted,
+        users: {
+            view: true,
+            create: true,
+            update: (user, data) => user.id === data.id,
+            delete: false,
+        },
     },
 } as const satisfies RolesWithPermissions;
 

@@ -21,6 +21,8 @@ import type { ServerActionResponse } from "@/types/server-actions";
 const orderProductSchema = z.object({
     productId: z.string().min(1),
     qty: z.number().min(1),
+    unitPriceCents: z.number().min(0),
+    lineTotalCents: z.number().min(0),
 });
 
 const orderFormSchema = z.object({
@@ -46,8 +48,10 @@ export async function generateOrderNumberAction() {
         .orderBy(desc(OrdersTable.orderNumber))
         .then((res) => res[0]);
 
+
+
     const todayCount = order?.orderNumber
-        ? parseInt(order.orderNumber.split("-")[3] || "0")
+        ? parseInt(order.orderNumber.split("-")[2] || "0")
         : 0;
 
     return generateOrderNumber(todayCount);
@@ -91,6 +95,53 @@ export async function createOrder(
             };
         }
 
+        const uniqueProductIds = Array.from(
+            new Set(items.map((item) => item.productId)),
+        );
+
+        const productRecords = await db
+            .select({ id: ProductsTable.id, priceCents: ProductsTable.priceCents })
+            .from(ProductsTable)
+            .where(inArray(ProductsTable.id, uniqueProductIds));
+
+        const productMap = new Map(productRecords.map((product) => [product.id, product]));
+
+        if (productMap.size !== uniqueProductIds.length) {
+            return {
+                error: true,
+                message: "One or more selected products are unavailable",
+            };
+        }
+
+        const normalizedItems = items.map((item) => {
+            const product = productMap.get(item.productId);
+
+            if (!product) {
+                throw new Error("Invalid product selected for this order");
+            }
+
+            const qty = Math.max(1, Math.round(item.qty));
+            const unitPriceCents = product.priceCents;
+            const lineTotalCents = unitPriceCents * qty;
+
+            return {
+                productId: item.productId,
+                qty,
+                unitPriceCents,
+                lineTotalCents,
+            };
+        });
+
+        const computedOrderTotal = normalizedItems.reduce(
+            (sum, item) => sum + item.lineTotalCents,
+            0,
+        );
+
+        const safeTotalPaid = Math.max(
+            0,
+            Math.min(orderFields.totalPaid, computedOrderTotal),
+        );
+
         const existingCustomer = await db
             .select()
             .from(CustomersTable)
@@ -104,7 +155,7 @@ export async function createOrder(
                 await tx
                     .update(CustomersTable)
                     .set({
-                        totalSpent: existingCustomer.totalSpent + orderFields.orderTotal,
+                        totalSpent: existingCustomer.totalSpent + computedOrderTotal,
                     })
                     .where(eq(CustomersTable.id, existingCustomer.id));
 
@@ -115,7 +166,7 @@ export async function createOrder(
                     .values({
                         name: orderFields.customerName || "Guest",
                         phone: orderFields.customerPhone || "",
-                        totalSpent: orderFields.orderTotal,
+                        totalSpent: computedOrderTotal,
                         createdBy: user.email,
                     })
                     .returning()
@@ -132,6 +183,8 @@ export async function createOrder(
                 .insert(OrdersTable)
                 .values({
                     ...orderFields,
+                    orderTotal: computedOrderTotal,
+                    totalPaid: safeTotalPaid,
                     createdBy: user.email,
                     customerId,
                     employeeId: user.id,
@@ -144,10 +197,12 @@ export async function createOrder(
             }
 
             await tx.insert(OrdersProductsTable).values(
-                items.map((item) => ({
+                normalizedItems.map((item) => ({
                     orderId: createdOrder.id,
                     productId: item.productId,
                     qty: item.qty,
+                    unitPriceCents: item.unitPriceCents,
+                    lineTotalCents: item.lineTotalCents,
                 })),
             );
 
@@ -191,33 +246,136 @@ export async function editOrders(
         } as Partial<typeof OrdersTable.$inferInsert>;
 
         const updatedOrders = await db.transaction(async (tx) => {
+            let normalizedItems: Array<{
+                productId: string;
+                qty: number;
+                unitPriceCents: number;
+                lineTotalCents: number;
+            }> = [];
+
+            if (items) {
+                if (ids.length !== 1) {
+                    throw new Error("Cannot update products for multiple orders at once");
+                }
+
+                if (items.length === 0) {
+                    throw new Error("Order must include at least one product");
+                }
+
+                const orderId = ids[0];
+                if (!orderId) {
+                    throw new Error("Order id is required");
+                }
+
+                const uniqueProductIds = Array.from(
+                    new Set(items.map((item) => item.productId)),
+                );
+
+                const productRecords = await tx
+                    .select({ id: ProductsTable.id, priceCents: ProductsTable.priceCents })
+                    .from(ProductsTable)
+                    .where(inArray(ProductsTable.id, uniqueProductIds));
+
+                const productMap = new Map(
+                    productRecords.map((product) => [product.id, product]),
+                );
+
+                if (productMap.size !== uniqueProductIds.length) {
+                    throw new Error("One or more selected products are unavailable");
+                }
+
+                normalizedItems = items.map((item) => {
+                    const product = productMap.get(item.productId);
+
+                    if (!product) {
+                        throw new Error("Invalid product selected for this order");
+                    }
+
+                    const qty = Math.max(1, Math.round(item.qty));
+                    const unitPriceCents = product.priceCents;
+                    const lineTotalCents = unitPriceCents * qty;
+
+                    return {
+                        productId: item.productId,
+                        qty,
+                        unitPriceCents,
+                        lineTotalCents,
+                    };
+                });
+
+                const computedOrderTotal = normalizedItems.reduce(
+                    (sum, item) => sum + item.lineTotalCents,
+                    0,
+                );
+
+                const currentTotals = await tx
+                    .select({ totalPaid: OrdersTable.totalPaid })
+                    .from(OrdersTable)
+                    .where(eq(OrdersTable.id, orderId))
+                    .then((res) => res[0]);
+
+                const requestedTotalPaid =
+                    orderData.totalPaid !== undefined
+                        ? orderData.totalPaid
+                        : currentTotals?.totalPaid ?? 0;
+
+                const safeTotalPaid = Math.max(
+                    0,
+                    Math.min(requestedTotalPaid, computedOrderTotal),
+                );
+
+                updatePayload.orderTotal = computedOrderTotal;
+                updatePayload.totalPaid = safeTotalPaid;
+            } else if (orderData.totalPaid !== undefined) {
+                if (ids.length === 1) {
+                    const orderId = ids[0];
+
+                    if (!orderId) {
+                        throw new Error("Order id is required");
+                    }
+
+                    const existingOrder = await tx
+                        .select({ orderTotal: OrdersTable.orderTotal })
+                        .from(OrdersTable)
+                        .where(eq(OrdersTable.id, orderId))
+                        .then((res) => res[0]);
+
+                    const existingTotal = existingOrder?.orderTotal ?? orderData.totalPaid;
+
+                    updatePayload.totalPaid = Math.max(
+                        0,
+                        Math.min(orderData.totalPaid, existingTotal),
+                    );
+                } else {
+                    updatePayload.totalPaid = Math.max(0, orderData.totalPaid);
+                }
+            }
+
             const result = await tx
                 .update(OrdersTable)
                 .set(updatePayload)
                 .where(inArray(OrdersTable.id, ids))
                 .returning();
 
-            if (items && ids.length !== 1) {
-                throw new Error("Cannot update products for multiple orders at once");
-            }
-
             if (items && ids[0]) {
-                if (items.length === 0) {
-                    throw new Error("Order must include at least one product");
-                }
-
                 const orderId = ids[0];
+
+                if (!orderId) {
+                    throw new Error("Order id is required");
+                }
 
                 await tx
                     .delete(OrdersProductsTable)
                     .where(eq(OrdersProductsTable.orderId, orderId));
 
-                if (items.length > 0) {
+                if (normalizedItems.length > 0) {
                     await tx.insert(OrdersProductsTable).values(
-                        items.map((item) => ({
+                        normalizedItems.map((item) => ({
                             orderId,
                             productId: item.productId,
                             qty: item.qty,
+                            unitPriceCents: item.unitPriceCents,
+                            lineTotalCents: item.lineTotalCents,
                         })),
                     );
                 }
@@ -303,14 +461,23 @@ export async function getOrderFormProducts() {
 
 export async function getOrderProducts(
     orderId: string,
-): Promise<ServerActionResponse<{ productId: string, qty: number }[]>> {
+): Promise<
+    ServerActionResponse<
+        { productId: string; qty: number; unitPriceCents: number; lineTotalCents: number }[]
+    >
+> {
     const user = await getCurrentUser({ redirectIfNotFound: true });
     if (!hasPermission(user, "orders", "view")) {
         return { error: true, message: "Unauthorized" };
     }
 
     const orderProducts = await db
-        .select({ productId: OrdersProductsTable.productId, qty: OrdersProductsTable.qty })
+        .select({
+            productId: OrdersProductsTable.productId,
+            qty: OrdersProductsTable.qty,
+            unitPriceCents: OrdersProductsTable.unitPriceCents,
+            lineTotalCents: OrdersProductsTable.lineTotalCents,
+        })
         .from(OrdersProductsTable)
         .where(eq(OrdersProductsTable.orderId, orderId));
 

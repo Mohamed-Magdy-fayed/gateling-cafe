@@ -1,10 +1,10 @@
 "use client";
 
 import type { Column } from "@tanstack/react-table";
+import { addDays } from "date-fns";
 import { CalendarIcon, XCircle } from "lucide-react";
 import * as React from "react";
 import type { DateRange } from "react-day-picker";
-
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -15,7 +15,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { formatDate } from "@/lib/format";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { addDays, setDate } from "date-fns";
 
 type DateSelection = Date[] | DateRange;
 
@@ -183,12 +182,15 @@ export function DataTableDateFilter<TData>({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="border-dashed">
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-dashed"
+          aria-label={t("dataTable.clearFilter", { title: filterTitle })}
+          tabIndex={0}
+        >
           {hasValue ? (
             <div
-              role="button"
-              aria-label={t("dataTable.clearFilter", { title: filterTitle })}
-              tabIndex={0}
               onClick={onReset}
               className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
@@ -222,7 +224,7 @@ export function DataTableDateFilter<TData>({
             onSelect={onSelect}
           />
         )}
-        <div className="flex flex-wrap gap-2 border-t px-4 !py-4">
+        <div className="flex flex-wrap gap-2 border-t px-4 py-4!">
           {[
             { label: t("common.today"), value: 0 },
             { label: t("common.tomorrow"), value: 1 },
@@ -233,10 +235,10 @@ export function DataTableDateFilter<TData>({
               size="sm"
               className="flex-1"
               onClick={() => {
-                const newDate = addDays(new Date(), preset.value)
+                const newDate = addDays(new Date(), preset.value);
                 getIsDateRange(selectedDates)
                   ? onSelect({ from: newDate, to: newDate })
-                  : onSelect(newDate)
+                  : onSelect(newDate);
               }}
             >
               {preset.label}

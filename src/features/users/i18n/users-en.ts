@@ -8,12 +8,11 @@ export default {
         screens: "Screens",
         screenNames: {
             dashboard: "Dashboard",
-            branches: "Branches",
-            dresses: "Dresses",
             users: "Employees",
-            reservations: "Reservations",
+            products: "Products",
             customers: "Customers",
-            settings: "Settings",
+            orders: "Orders",
+            reservations: "Reservations",
         },
     },
 } as const satisfies LanguageMessages;

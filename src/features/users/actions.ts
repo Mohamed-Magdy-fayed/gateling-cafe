@@ -1,11 +1,14 @@
 "use server";
 
 import { eq, inArray } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import z from "zod";
 import { generateSalt, hashPassword } from "@/auth/core/password-hasher";
+import { hasPermission } from "@/auth/core/permissions";
 import { getCurrentUser } from "@/auth/nextjs/get-current-user";
 import { db } from "@/drizzle";
 import { UsersTable, userScreens } from "@/drizzle/schema";
+import type { ServerActionResponse } from "@/types/server-actions";
 
 const userFormSchema = z.object({
     name: z.string().min(3),
@@ -13,7 +16,6 @@ const userFormSchema = z.object({
     password: z.string().min(6),
     role: z.enum(["admin", "user"]),
     phone: z.string().min(10).max(15).optional(),
-    branchId: z.string().optional(),
     screens: z.array(z.enum(userScreens)),
 });
 type UserFormValues = z.infer<typeof userFormSchema>;
@@ -43,23 +45,27 @@ export async function createUser(data: UserFormValues) {
         const salt = generateSalt();
         const hashedPassword = await hashPassword(userData.password, salt);
 
+        const newUser = (
+            await db
+                .insert(UsersTable)
+                .values({
+                    createdBy: user.email,
+                    email: userData.email,
+                    name: userData.name,
+                    password: hashedPassword,
+                    salt,
+                    role: userData.role,
+                    phone: userData.phone,
+                    screens: userData.screens,
+                })
+                .returning()
+        ).pop();
+
+        revalidatePath("/users");
+
         return {
             error: false,
-            data: (
-                await db
-                    .insert(UsersTable)
-                    .values({
-                        createdBy: user.email,
-                        email: userData.email,
-                        name: userData.name,
-                        password: hashedPassword,
-                        salt,
-                        role: userData.role,
-                        phone: userData.phone,
-                        screens: userData.screens,
-                    })
-                    .returning()
-            ).pop(),
+            data: newUser,
         };
     } catch (error) {
         return { error: true, message: (error as Error).message };
@@ -102,16 +108,25 @@ export async function editUsers(
     }
 }
 
-export async function deleteUsers(ids: string[]) {
+export async function deleteUsers(
+    ids: string[],
+): Promise<ServerActionResponse<number>> {
     try {
-        const user = await getCurrentUser();
-        if (!user || user.role !== "admin") {
+        const user = await getCurrentUser({ redirectIfNotFound: true });
+        if (!hasPermission(user, "users", "delete")) {
             throw new Error("Unauthorized");
         }
 
-        return (
+        const data = (
             await db.delete(UsersTable).where(inArray(UsersTable.id, ids)).returning()
         ).length;
+
+        revalidatePath("/users");
+
+        return {
+            error: false,
+            data,
+        };
     } catch (error) {
         return { error: true, message: (error as Error).message };
     }

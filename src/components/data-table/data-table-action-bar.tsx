@@ -12,8 +12,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { cn } from "@/lib/utils";
 
 interface DataTableActionBarProps<TData>
   extends React.ComponentProps<typeof motion.div> {
@@ -98,10 +98,7 @@ function DataTableActionBarAction({
     <Button
       variant={props.variant || "default"}
       size={size}
-      className={cn(
-        size === "icon" ? "size-7" : "h-7",
-        className,
-      )}
+      className={cn(size === "icon" ? "size-7" : "h-7", className)}
       disabled={disabled || isPending}
       {...props}
     >
@@ -140,7 +137,9 @@ function DataTableActionBarSelection<TData>({
   return (
     <div className="flex h-7 items-center rounded-md border px-2 gap-2">
       <span className="whitespace-nowrap text-xs">
-        {t("dataTable.selected", { count: table.getFilteredSelectedRowModel().rows.length })}
+        {t("dataTable.selected", {
+          count: table.getFilteredSelectedRowModel().rows.length,
+        })}
       </span>
       <Separator
         orientation="vertical"

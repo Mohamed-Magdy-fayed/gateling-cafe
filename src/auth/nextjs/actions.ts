@@ -1,19 +1,17 @@
-"use server"
+"use server";
 
-import { z } from "zod"
-import { redirect } from "next/navigation"
-import { signInSchema } from "./schemas"
-import { db } from "@/drizzle"
-import { UsersTable } from "@/drizzle/schema"
-import { eq } from "drizzle-orm"
-import {
-  comparePasswords,
-} from "../core/password-hasher"
-import { cookies, headers } from "next/headers"
-import { createSession, removeSession } from "../core/session"
+import { eq } from "drizzle-orm";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
+import type { z } from "zod";
+import { db } from "@/drizzle";
+import { UsersTable } from "@/drizzle/schema";
+import { comparePasswords } from "../core/password-hasher";
+import { createSession, removeSession } from "../core/session";
+import { signInSchema } from "./schemas";
 
 export async function signIn(unsafeData: z.infer<typeof signInSchema>) {
-  const { success, data } = signInSchema.safeParse(unsafeData)
+  const { success, data } = signInSchema.safeParse(unsafeData);
 
   if (!success) return "Bad request" as const;
 
@@ -27,11 +25,10 @@ export async function signIn(unsafeData: z.infer<typeof signInSchema>) {
       imageUrl: true,
       phone: true,
       role: true,
-      branchId: true,
       screens: true,
     },
     where: eq(UsersTable.email, data.email),
-  })
+  });
 
   if (user == null) return "No user" as const;
 
@@ -41,13 +38,13 @@ export async function signIn(unsafeData: z.infer<typeof signInSchema>) {
     hashedPassword: user.password,
     password: data.password,
     salt: user.salt,
-  })
+  });
 
   if (!isCorrectPassword) return "Credentials" as const;
 
-  await createSession(user, await cookies())
+  await createSession(user, await cookies());
 
-  redirect("/")
+  redirect("/");
 }
 
 export async function logOut() {

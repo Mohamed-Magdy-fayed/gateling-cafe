@@ -104,7 +104,7 @@ export function SelectField<TData>({
           ) : (
             <PlusCircle />
           )}
-          {title}
+          {selectedValues.size === 0 && title}
           {selectedValues.size > 0 && (
             <>
               <Separator
