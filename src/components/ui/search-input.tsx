@@ -1,11 +1,10 @@
-"use client"
+"use client";
 
-import * as React from "react"
-
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
-import { SearchIcon, XIcon } from "lucide-react"
+import { SearchIcon, XIcon } from "lucide-react";
+import type * as React from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 function SearchInput({
     className,
@@ -47,7 +46,7 @@ function SearchInput({
                 </Button>
             )}
         </div>
-    )
+    );
 }
 
-export { SearchInput }
+export { SearchInput };
