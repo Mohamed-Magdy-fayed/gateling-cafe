@@ -30,8 +30,6 @@ const orderFormSchema = z.object({
     status: z.enum(orderStatuses),
     orderTotal: z.number(),
     totalPaid: z.number(),
-    customerName: z.string(),
-    customerPhone: z.string(),
     items: z.array(orderProductSchema).min(1),
 });
 type OrderFormValues = z.infer<typeof orderFormSchema>;
@@ -144,8 +142,8 @@ export async function createOrder(
 
         const { customer } = await insertOrGetCustomer({
             createdBy: user.email,
-            customerName: orderFields.customerName,
-            customerPhone: orderFields.customerPhone,
+            customerName: "default name",
+            customerPhone: "0000000000",
             totalSpent: computedOrderTotal,
         });
 
@@ -428,10 +426,7 @@ export async function getOrderFormProducts() {
     const products = await db
         .select()
         .from(ProductsTable)
-        .where(
-            and(isNull(ProductsTable.deletedAt), eq(ProductsTable.status, "active")),
-        );
-
+        .where(isNull(ProductsTable.deletedAt));
     return {
         error: false,
         data: products,

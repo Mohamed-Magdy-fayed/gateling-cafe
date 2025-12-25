@@ -27,6 +27,7 @@ export const userScreens = [
   "products",
   "orders",
   "reservations",
+  "playground",
 ] as const;
 export const userScreensEnum = pgEnum("user_screens", userScreens);
 export type UserScreen = (typeof userScreens)[number];

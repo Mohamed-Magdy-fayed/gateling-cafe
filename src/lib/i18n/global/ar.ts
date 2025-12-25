@@ -1,4 +1,6 @@
 import authAr from "@/auth/translations/auth-ar";
+import dashboardAr from "@/features/dashboard/i18n/dashboard-ar";
+import kidsAreaCalloutsAr from "@/features/kids-area-callouts/i18n/kids-area-callouts-ar";
 import ordersAr from "@/features/orders/i18n/orders-ar";
 import productsAr from "@/features/products/i18n/products-ar";
 import reservationsAr from "@/features/reservations/i18n/reservations-ar";
@@ -16,10 +18,11 @@ export default {
   hobby: dt("اخترت {hobby:enum} كهوايتك.", {
     enum: { hobby: { runner: "عداء", developer: "مطور" } },
   }),
-  appName: "كافيه جاتيلينج",
+  appName: "Lavida Jungle Play",
   common: {
     menu: "القائمة",
     today: "اليوم",
+    yesterday: "أمس",
     tomorrow: "غدًا",
     loading: "جاري التحميل...",
     auditInfo: "معلومات التدقيق",
@@ -128,6 +131,7 @@ export default {
     emailExists: "البريد الإلكتروني مستخدم بالفعل!",
     invalidEmail: "البريد الإلكتروني غير صحيح، يرجى المحاولة مرة أخرى.",
     messageFailed: "فشل إرسال الرسالة، يرجى المحاولة مرة أخرى.",
+    unauthorized: "غير مصرح",
   },
   system: {
     mainNavigation: "التنقل الرئيسي",
@@ -199,13 +203,16 @@ export default {
   dashboard: "لوحة التحكم",
   reservations: "حجوزات",
   customers: "العملاء",
+  playground: "الملعب",
   users: "الموظفين",
   signOut: "تسجيل الخروج",
   printSuccess: "تمت الطباعة بنجاح!",
   ...authAr,
   ...usersAr,
+  ...dashboardAr,
   ...productsAr,
   ...ordersAr,
   ...reservationsAr,
+  ...kidsAreaCalloutsAr,
   ...firebaseAr,
 } as const satisfies LanguageMessages;

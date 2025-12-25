@@ -1,4 +1,6 @@
 import authEn from "@/auth/translations/auth-en";
+import dashboardEn from "@/features/dashboard/i18n/dashboard-en";
+import kidsAreaCalloutsEn from "@/features/kids-area-callouts/i18n/kids-area-callouts-en";
 import ordersEn from "@/features/orders/i18n/orders-en";
 import productsEn from "@/features/products/i18n/products-en";
 import reservationsEn from "@/features/reservations/i18n/reservations-en";
@@ -16,10 +18,11 @@ export default {
   hobby: dt("You chose {hobby:enum} as your hobby.", {
     enum: { hobby: { runner: "runner", developer: "developer" } },
   }),
-  appName: "Gateling Cafe",
+  appName: "Lavida Jungle Play",
   common: {
     menu: "Menu",
     today: "Today",
+    yesterday: "Yesterday",
     tomorrow: "Tomorrow",
     loading: "Loading...",
     auditInfo: "Audit Info",
@@ -130,6 +133,7 @@ export default {
     emailExists: "Email already exists!",
     invalidEmail: "Incorrect Email, please try again.",
     messageFailed: "Message sending failed, please try again.",
+    unauthorized: "Unauthorized",
   },
   system: {
     mainNavigation: "Main Navigation",
@@ -200,12 +204,15 @@ export default {
   reservations: "Reservations",
   customers: "Customers",
   users: "Users",
+  playground: "Playground",
   signOut: "Sign Out",
   printSuccess: "Print successful!",
   ...authEn,
   ...usersEn,
+  ...dashboardEn,
   ...productsEn,
   ...ordersEn,
   ...reservationsEn,
+  ...kidsAreaCalloutsEn,
   ...firebaseEn,
 } as const satisfies LanguageMessages;

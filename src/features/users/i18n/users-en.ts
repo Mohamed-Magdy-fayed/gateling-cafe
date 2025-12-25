@@ -13,6 +13,7 @@ export default {
             customers: "Customers",
             orders: "Orders",
             reservations: "Reservations",
+            playground: "Playground",
         },
     },
 } as const satisfies LanguageMessages;

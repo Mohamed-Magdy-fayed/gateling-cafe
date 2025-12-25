@@ -49,9 +49,7 @@ const ROLES = {
         reservations: unrestricted,
     },
     user: {
-        products: {
-            view: true,
-        },
+        products: unrestricted,
         orders: unrestricted,
         users: {
             view: true,

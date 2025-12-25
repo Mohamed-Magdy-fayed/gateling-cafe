@@ -12,7 +12,6 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { SheetFooter } from "@/components/ui/sheet";
 import { type Order, orderStatuses } from "@/drizzle/schema";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -85,44 +84,6 @@ export function OrdersForm({
                                             setValues={(vals) =>
                                                 field.onChange(vals.length ? vals[0] : "")
                                             }
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                    <div className="grid gap-4">
-                        <FormField
-                            control={form.control}
-                            name="customerName"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{t("ordersTranslations.customerName")}</FormLabel>
-                                    <FormControl>
-                                        <Input
-                                            placeholder={t(
-                                                "ordersTranslations.customerNamePlaceholder",
-                                            )}
-                                            {...field}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="customerPhone"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{t("ordersTranslations.customerPhone")}</FormLabel>
-                                    <FormControl>
-                                        <Input
-                                            placeholder={t(
-                                                "ordersTranslations.customerPhonePlaceholder",
-                                            )}
-                                            {...field}
                                         />
                                     </FormControl>
                                     <FormMessage />

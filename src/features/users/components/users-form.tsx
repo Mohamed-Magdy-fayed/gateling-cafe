@@ -22,6 +22,15 @@ import { type User, userScreens } from "@/drizzle/schema";
 import { createUser, editUsers } from "@/features/users/actions";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
+const screenTranslationKey = {
+    dashboard: "usersTranslations.screenNames.dashboard",
+    users: "usersTranslations.screenNames.users",
+    products: "usersTranslations.screenNames.products",
+    orders: "usersTranslations.screenNames.orders",
+    reservations: "usersTranslations.screenNames.reservations",
+    playground: "usersTranslations.screenNames.playground",
+} as const;
+
 export const userFormSchema = z.object({
     name: z.string().min(3),
     email: z.email(),
@@ -139,7 +148,7 @@ export function UsersForm({ user, setIsOpen }: { user?: User, setIsOpen: (isOpen
                                         multiple
                                         options={userScreens.map((screen) => ({
                                             value: screen,
-                                            label: t(`usersTranslations.screenNames.${screen}`),
+                                            label: t(screenTranslationKey[screen]),
                                         }))}
                                         title={t("usersTranslations.screens")}
                                         values={field.value ?? []}

@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
 import { CalendarIcon, XCircle } from "lucide-react";
 import * as React from "react";
 import type { DateRange } from "react-day-picker";
-
+import type { ControllerRenderProps } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -12,9 +12,8 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { ControllerRenderProps } from "react-hook-form";
+import { cn } from "@/lib/utils";
 
 export type DateSelection = Date | Date[] | DateRange | undefined;
 
@@ -49,7 +48,7 @@ function formatMultipleDates(dates: Date[], locale: string = "en-US"): string {
     if (dates.length === 0) return "";
     if (dates.length === 1) return formatDate(dates[0]!, locale);
     if (dates.length <= 3) {
-        return dates.map(date => formatDate(date, locale)).join(", ");
+        return dates.map((date) => formatDate(date, locale)).join(", ");
     }
     return `${formatDate(dates[0]!, locale)} +${dates.length - 1} more`;
 }
@@ -178,9 +177,7 @@ export function SelectDateField({
                         ) : (
                             <CalendarIcon className="h-4 w-4 shrink-0" />
                         )}
-                        <span className="flex-1 truncate">
-                            {label || displayText}
-                        </span>
+                        <span className="flex-1 truncate">{label || displayText}</span>
                     </div>
                 </Button>
             </PopoverTrigger>
@@ -213,7 +210,10 @@ export function SelectDateField({
     );
 }
 
-export function handleDateChange(field: ControllerRenderProps<any>, newDate: DateSelection) {
+export function handleDateChange(
+    field: ControllerRenderProps<any>,
+    newDate: DateSelection,
+) {
     if (!newDate || !(newDate instanceof Date)) {
         field.onChange(undefined);
         return;
@@ -223,4 +223,4 @@ export function handleDateChange(field: ControllerRenderProps<any>, newDate: Dat
     combinedDate.setMonth(newDate.getMonth());
     combinedDate.setDate(newDate.getDate());
     field.onChange(combinedDate);
-};
+}

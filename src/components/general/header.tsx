@@ -1,6 +1,7 @@
 "use client";
 
 import { CoffeeIcon, LogOutIcon, MenuIcon, XIcon } from "lucide-react";
+import Image from "next/image";
 // import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -54,6 +55,7 @@ export function Header() {
     { name: t("ordersTranslations.orders"), href: "/orders" },
     { name: t("reservations"), href: "/reservations" },
     { name: t("users"), href: "/users" },
+    { name: t("playground"), href: "/playground" },
   ].filter((screen) =>
     session.session?.user.screens.some((s) => screen.href.includes(s)),
   );
@@ -71,14 +73,13 @@ export function Header() {
         <div className="flex h-16 gap-4 items-center justify-between">
           {/* Logo with enhanced styling */}
           <div className="flex items-center gap-2">
-            {/* <Image
-              src="/logo.png"
+            <Image
+              src="/logo_design.png"
               alt="Logo"
               width={256}
               height={256}
-              className="w-20 dark:invert"
-            /> */}
-            <CoffeeIcon size={32} className="text-primary-foreground bg-primary rounded-md p-1" />
+              className="w-20 p-2"
+            />
             <H3 className="text-xl font-bold hidden md:inline">
               {t("appName")}
             </H3>

@@ -1,26 +1,18 @@
 "use server";
 
-import { count, inArray, isNull } from "drizzle-orm";
+import { inArray, isNull } from "drizzle-orm";
 import z from "zod";
+
 import { hasPermission } from "@/auth/core/permissions";
 import { getCurrentUser } from "@/auth/nextjs/get-current-user";
 import { db } from "@/drizzle";
 import {
     ProductsTable,
-    productCategories,
-    productStatuses,
-    productTypes,
 } from "@/drizzle/schema";
-import { getT } from "@/lib/i18n/actions";
 
 const productFormSchema = z.object({
     name: z.string(),
-    description: z.string(),
     priceCents: z.number(),
-    images: z.string().array(),
-    type: z.enum(productTypes),
-    category: z.enum(productCategories),
-    status: z.enum(productStatuses),
 });
 type ProductFormValues = z.infer<typeof productFormSchema>;
 
@@ -125,70 +117,4 @@ export async function deleteProducts(ids: string[]) {
     } catch (error) {
         return { error: true, message: (error as Error).message };
     }
-}
-
-export async function getStatusCounts() {
-    const user = await getCurrentUser({ redirectIfNotFound: true });
-    if (!hasPermission(user, "products", "view")) {
-        return [];
-    }
-
-    const { t } = await getT();
-
-    const statusCounts = await db
-        .select({
-            value: ProductsTable.status,
-            count: count(ProductsTable.status),
-        })
-        .from(ProductsTable)
-        .groupBy(ProductsTable.status);
-
-    return statusCounts.map((status) => ({
-        ...status,
-        label: t(`productsTranslations.statusNames`, { statusName: status.value }),
-    }));
-}
-
-export async function getTypeCounts() {
-    const user = await getCurrentUser({ redirectIfNotFound: true });
-    if (!hasPermission(user, "products", "view")) {
-        return [];
-    }
-
-    const { t } = await getT();
-
-    const typeCounts = await db
-        .select({
-            value: ProductsTable.type,
-            count: count(ProductsTable.type),
-        })
-        .from(ProductsTable)
-        .groupBy(ProductsTable.type);
-
-    return typeCounts.map((type) => ({
-        ...type,
-        label: t(`productsTranslations.typeNames`, { typeName: type.value }),
-    }));
-}
-
-export async function getCategoryCounts() {
-    const user = await getCurrentUser({ redirectIfNotFound: true });
-    if (!hasPermission(user, "products", "view")) {
-        return [];
-    }
-
-    const { t } = await getT();
-
-    const categoryCounts = await db
-        .select({
-            value: ProductsTable.category,
-            count: count(ProductsTable.category),
-        })
-        .from(ProductsTable)
-        .groupBy(ProductsTable.category);
-
-    return categoryCounts.map((category) => ({
-        ...category,
-        label: t(`productsTranslations.categoryNames`, { categoryName: category.value }),
-    }));
 }

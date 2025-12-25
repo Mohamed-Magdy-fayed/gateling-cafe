@@ -18,6 +18,7 @@ import {
   updatedAt,
   updatedBy,
 } from "@/drizzle/schemas/helpers";
+import { PlaytimeOptionsTable } from "@/drizzle/schemas/kids/playtime-options-table";
 
 export const reservationStatus = [
   "reserved",
@@ -42,10 +43,16 @@ export const ReservationsTable = pgTable(
     deletedAt,
     deletedBy,
 
-    employeeId: varchar().references(() => UsersTable.id, { onDelete: "set null" }),
+    employeeId: varchar().references(() => UsersTable.id, {
+      onDelete: "set null",
+    }),
     customerId: varchar()
       .notNull()
       .references(() => CustomersTable.id, { onDelete: "cascade" }),
+
+    playtimeOptionId: varchar().references(() => PlaytimeOptionsTable.id, {
+      onDelete: "set null",
+    }),
 
     reservationCode: varchar({ length: 128 }).notNull().unique(),
     customerName: varchar({ length: 255 }).notNull(),

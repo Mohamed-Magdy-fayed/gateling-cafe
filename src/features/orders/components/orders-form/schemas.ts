@@ -13,8 +13,6 @@ export const orderFormSchema = z.object({
     status: z.enum(orderStatuses),
     orderTotal: z.number().min(0),
     totalPaid: z.number().min(0),
-    customerName: z.string().min(1),
-    customerPhone: z.string().min(1),
     items: z.array(orderProductSchema).min(1),
 });
 

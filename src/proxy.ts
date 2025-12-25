@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookie } from "@/auth/core/session";
 import type { UserScreen } from "@/drizzle/schema";
 
-const PUBLIC_PATHS = ["/auth/sign-in"];
+const PUBLIC_PATHS = ["/auth/sign-in", "/playground"];
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (isPublicRoute) {
-        return NextResponse.redirect(new URL("/", request.url));
+        return NextResponse.next();
     }
 
     const accessibleScreens = session.user.screens ?? [];

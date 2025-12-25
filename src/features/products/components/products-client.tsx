@@ -12,18 +12,11 @@ import { getProductsColumns } from "@/features/products/components/products-colu
 import { ProductsForm } from "@/features/products/components/products-form";
 import { useDataTable } from "@/hooks/use-data-table";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Option } from "@/types/data-table";
 
 export function ProductsClient({
     products,
-    categoriesCounts,
-    statusCounts,
-    typesCounts,
 }: {
     products: Product[];
-    categoriesCounts: Option[];
-    statusCounts: Option[];
-    typesCounts: Option[];
 }) {
     const { t } = useTranslation();
 
@@ -31,16 +24,9 @@ export function ProductsClient({
 
     const { table } = useDataTable({
         columns: getProductsColumns({
-            category: t("productsTranslations.category"),
             createdAt: t("common.createdAt"),
             name: t("productsTranslations.name"),
             priceCents: t("productsTranslations.price"),
-            status: t("productsTranslations.status"),
-            type: t("productsTranslations.type"),
-            categoriesCounts,
-            statusCounts,
-            typesCounts,
-            getTranslation: t,
         }),
         data: products,
     });

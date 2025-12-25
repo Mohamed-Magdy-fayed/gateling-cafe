@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import type { Reservation } from "@/drizzle/schema";
-import { editReservations, getTTSUrl } from "@/features/reservations/actions";
+import { endReservationIfTimedOutAction, getTTSUrl } from "@/features/reservations/actions";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 function toDate(value: Reservation["endTime"]): Date | null {
@@ -11,52 +11,94 @@ function toDate(value: Reservation["endTime"]): Date | null {
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function playAudio(url: string) {
+    const audio = new Audio(url);
+
+    return new Promise<void>((resolve, reject) => {
+        const onEnded = () => resolve();
+        const onError = () => reject(new Error("Failed to play announcement audio"));
+
+        audio.addEventListener("ended", onEnded, { once: true });
+        audio.addEventListener("error", onError, { once: true });
+
+        audio.play().catch(reject);
+    });
+}
+
 export function useReservationAnnouncements(reservations: Reservation[]) {
     const { t, locale } = useTranslation();
-    const [isPending, startTransition] = useTransition();
+    const [_, startTransition] = useTransition();
     const announcedIdsRef = useRef(new Set<string>());
+    const isAnnouncingRef = useRef(false);
+
+    const reservationsRef = useRef(reservations);
+    useEffect(() => {
+        reservationsRef.current = reservations;
+    }, [reservations]);
 
     const announce = useCallback(
         (reservation: Reservation) => {
-            if (reservation.status === "ended" || isPending) return;
+            if (
+                reservation.status === "ended" ||
+                reservation.status === "cancelled" ||
+                isAnnouncingRef.current
+            ) {
+                return;
+            }
 
             const endTime = toDate(reservation.endTime);
             if (!endTime || announcedIdsRef.current.has(reservation.id)) {
                 return;
             }
 
+            // Mark as in-progress to prevent duplicate triggers until this completes.
+            announcedIdsRef.current.add(reservation.id);
+            isAnnouncingRef.current = true;
+
             startTransition(async () => {
-                const response = await editReservations({
-                    ids: [reservation.id],
-                    status: "ended",
-                });
+                try {
+                    const response = await endReservationIfTimedOutAction({
+                        id: reservation.id,
+                    });
 
-                if (response.error) {
-                    toast.error(response.message);
-                    return
-                };
+                    if (response.error) {
+                        if (response.message !== "Not timed out") {
+                            toast.error(response.message);
+                        }
+                        announcedIdsRef.current.delete(reservation.id);
+                        return;
+                    }
 
-                const name = reservation.customerName.trim();
+                    const name = reservation.customerName.trim();
 
-                const url = await getTTSUrl(name)
-                const audio = new Audio(url);
-                await audio.play();
+                    const { enUrl, arUrl } = await getTTSUrl(name);
+                    await playAudio(enUrl);
+                    await playAudio(arUrl);
 
-                const toastTitle = t("reservationsTranslations.childPickupToastTitle", {
-                    customerName: name,
-                });
-                const toastDescription = t(
-                    "reservationsTranslations.childPickupToastDescription",
-                    {
-                        customerName: name,
-                        endTime,
-                    },
-                );
+                    const toastTitle = t(
+                        "reservationsTranslations.childPickupToastTitle",
+                        {
+                            customerName: name,
+                        },
+                    );
+                    const toastDescription = t(
+                        "reservationsTranslations.childPickupToastDescription",
+                        {
+                            customerName: name,
+                            endTime,
+                        },
+                    );
 
-                toast.info(toastTitle, { description: toastDescription });
+                    toast.info(toastTitle, { description: toastDescription });
+                } catch (error) {
+                    announcedIdsRef.current.delete(reservation.id);
+                    toast.error((error as Error).message);
+                } finally {
+                    isAnnouncingRef.current = false;
+                }
             });
         },
-        [locale, t],
+        [locale, startTransition, t],
     );
 
     useEffect(() => {
@@ -64,43 +106,44 @@ export function useReservationAnnouncements(reservations: Reservation[]) {
             return;
         }
 
-        const timers = new Map<string, number>();
-        const now = Date.now();
+        const check = () => {
+            const now = Date.now();
+            for (const reservation of reservationsRef.current) {
+                if (
+                    reservation.status === "ended" ||
+                    reservation.status === "cancelled" ||
+                    announcedIdsRef.current.has(reservation.id)
+                ) {
+                    continue;
+                }
 
-        reservations.forEach((reservation) => {
-            if (
-                reservation.status === "ended" ||
-                reservation.status === "cancelled" ||
-                announcedIdsRef.current.has(reservation.id)
-            ) {
-                return;
+                const endTime = toDate(reservation.endTime);
+                if (!endTime) continue;
+
+                if (endTime.getTime() <= now) {
+                    announce(reservation);
+                    // Only attempt one per tick to keep audio/tts serial.
+                    break;
+                }
             }
+        };
 
-            const endTime = toDate(reservation.endTime);
-            if (!endTime) {
-                return;
-            }
+        check();
 
-            const delay = endTime.getTime() - now;
-            if (delay <= 0) {
-                announce(reservation);
-                return;
-            }
+        const interval = window.setInterval(check, 30_000);
+        const onVisibility = () => {
+            if (document.visibilityState === "visible") check();
+        };
 
-            const timerId = window.setTimeout(() => {
-                announce(reservation);
-                timers.delete(reservation.id);
-            }, delay);
-
-            timers.set(reservation.id, timerId);
-        });
+        window.addEventListener("focus", check);
+        document.addEventListener("visibilitychange", onVisibility);
 
         return () => {
-            timers.forEach((id) => {
-                window.clearTimeout(id);
-            });
+            window.clearInterval(interval);
+            window.removeEventListener("focus", check);
+            document.removeEventListener("visibilitychange", onVisibility);
         };
-    }, [announce, reservations]);
+    }, [announce]);
 
     useEffect(() => {
         return () => {

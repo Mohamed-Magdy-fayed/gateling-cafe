@@ -8,24 +8,24 @@ import { LOCALE_COOKIE_NAME } from "@/lib/i18n/lib";
 
 export const metadata: Metadata = {
   title: {
-    default: "Gateling Cafe",
-    template: `%s | Gateling Cafe`,
+    default: "Lavida Jungle Play",
+    template: `%s | Lavida Jungle Play`,
   },
-  description: "Manage your cafe with ease using Gateling Cafe.",
+  description: "Manage your cafe with ease using Lavida Jungle Play.",
   authors: [
     {
-      name: "Gateling Cafe",
+      name: "Lavida Jungle Play",
       url: "https://gateling-cafe.vercel.app",
     },
   ],
-  creator: "Gateling Cafe",
+  creator: "Lavida Jungle Play",
   openGraph: {
     type: "website",
     locale: "en_US",
     url: "https://gateling-cafe.vercel.app",
-    title: "Gateling Cafe",
-    description: "Manage your cafe with ease using Gateling Cafe.",
-    siteName: "Gateling Cafe",
+    title: "Lavida Jungle Play",
+    description: "Manage your cafe with ease using Lavida Jungle Play.",
+    siteName: "Lavida Jungle Play",
   },
 };
 

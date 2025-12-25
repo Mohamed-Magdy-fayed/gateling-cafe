@@ -1,22 +1,30 @@
-"use client"
+"use client";
 
-import { SpinnerButton } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { LogInIcon } from "lucide-react"
-import z from "zod"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { useTranslation } from "@/lib/i18n/useTranslation"
-import { useState, useTransition } from "react"
-import { cn } from "@/lib/utils"
-import { signIn } from "@/auth/nextjs/actions"
-import { showAuthToast } from "@/auth/nextjs/lib"
+import { zodResolver } from "@hookform/resolvers/zod";
+import { LogInIcon } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useForm } from "react-hook-form";
+import z from "zod";
+import { signIn } from "@/auth/nextjs/actions";
+import { showAuthToast } from "@/auth/nextjs/lib";
+import { SpinnerButton } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   email: z.email(),
   password: z.string().min(1),
-})
+});
 
 type PendingAction = "idle" | "credentials" | "google";
 
@@ -24,8 +32,8 @@ export function SignInForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
-  const { t } = useTranslation()
-  const [isPending, startTransition] = useTransition()
+  const { t } = useTranslation();
+  const [isPending, startTransition] = useTransition();
   const [pendingAction, setPendingAction] = useState<PendingAction>("idle");
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -34,7 +42,7 @@ export function SignInForm({
       email: "",
       password: "",
     },
-  })
+  });
 
   async function onSubmit({ email, password }: z.infer<typeof formSchema>) {
     startTransition(async () => {
@@ -42,17 +50,21 @@ export function SignInForm({
 
       const error = await signIn({ email, password });
 
-      showAuthToast(error, t)
+      showAuthToast(error, t);
 
       setPendingAction("idle");
-    })
+    });
   }
 
   const isAnyActionPending = pendingAction !== "idle";
 
   return (
     <Form {...form}>
-      <form className={cn("p-6 md:p-8", className)} {...props} onSubmit={form.handleSubmit(onSubmit)}>
+      <form
+        className={cn("p-6 md:p-8", className)}
+        {...props}
+        onSubmit={form.handleSubmit(onSubmit)}
+      >
         <div className="flex flex-col gap-6 items-stretch">
           <div className="flex flex-col items-center text-center">
             <h1 className="text-2xl font-bold">{t("auth.signIn.title")}</h1>
@@ -80,7 +92,10 @@ export function SignInForm({
               <FormItem>
                 <FormLabel>{t("auth.password")}</FormLabel>
                 <FormControl>
-                  <Input type="password" placeholder={t("auth.passwordPlaceholder")} {...field} />
+                  <PasswordInput
+                    placeholder={t("auth.passwordPlaceholder")}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -97,6 +112,5 @@ export function SignInForm({
         </div>
       </form>
     </Form>
-  )
+  );
 }
-

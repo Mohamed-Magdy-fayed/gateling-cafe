@@ -1,24 +1,40 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import type { Reservation } from "@/drizzle/schema";
-import { editReservations } from "@/features/reservations/actions";
+import { autoStartDueReservationsAction } from "@/features/reservations/actions";
 
 export function useReservationStart(reservations: Reservation[]) {
     const [_, startTransition] = useTransition();
 
+    const reservationsRef = useRef(reservations);
     useEffect(() => {
-        const interval = setInterval(() => {
+        reservationsRef.current = reservations;
+    }, [reservations]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const sync = () => {
             startTransition(async () => {
-                const shouldStart = reservations.filter(reservation => reservation.status === "reserved" && reservation.startTime < new Date())
+                await autoStartDueReservationsAction();
+            });
+        };
 
-                await editReservations({
-                    ids: shouldStart.map(r => r.id),
-                    status: "started",
-                })
-            })
-        }, 60000);
+        sync();
 
-        return () => clearInterval(interval);
-    }, []);
+        const interval = window.setInterval(sync, 30_000);
+        const onVisibility = () => {
+            if (document.visibilityState === "visible") sync();
+        };
+
+        window.addEventListener("focus", sync);
+        document.addEventListener("visibilitychange", onVisibility);
+
+        return () => {
+            window.clearInterval(interval);
+            window.removeEventListener("focus", sync);
+            document.removeEventListener("visibilitychange", onVisibility);
+        };
+    }, [startTransition]);
 }

@@ -61,8 +61,6 @@ export function useOrdersForm({
     const form = useForm<OrderFormValues>({
         resolver: zodResolver(orderFormSchema),
         defaultValues: {
-            customerName: order?.customerName ?? "",
-            customerPhone: order?.customerPhone ?? "",
             orderNumber: order?.orderNumber ?? "",
             status: order?.status ?? "created",
             orderTotal: order?.orderTotal,

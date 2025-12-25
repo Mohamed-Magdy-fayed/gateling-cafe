@@ -13,6 +13,7 @@ export default {
             customers: "العملاء",
             orders: "الطلبات",
             reservations: "الحجوزات",
+            playground: "الملعب",
         },
     },
 } as const satisfies LanguageMessages;

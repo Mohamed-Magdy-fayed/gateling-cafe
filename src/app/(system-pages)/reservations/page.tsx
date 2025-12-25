@@ -1,13 +1,22 @@
 import { AlertTriangleIcon } from "lucide-react";
+import { hasPermission } from "@/auth/core/permissions";
+import { getCurrentUser } from "@/auth/nextjs/get-current-user";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { H3 } from "@/components/ui/typography";
-import { getReservations, getStatusCounts } from "@/features/reservations/actions";
+import {
+    getReservations,
+    getStatusCounts,
+} from "@/features/reservations/actions";
 import { ReservationsClient } from "@/features/reservations/components/reservations-client";
 import { ServerTranslate } from "@/lib/i18n/ServerTranslate";
 
 export default async function ReservationsPage() {
     const response = await getReservations();
-    const statusCounts = await getStatusCounts()
+    const statusCounts = await getStatusCounts();
+    const user = await getCurrentUser();
+    const canManageAnnouncements = user
+        ? hasPermission(user, "reservations", "update")
+        : false;
 
     if (response.error) {
         return (
@@ -34,6 +43,7 @@ export default async function ReservationsPage() {
             <ReservationsClient
                 reservations={response.data}
                 statusCounts={statusCounts}
+                canManageAnnouncements={canManageAnnouncements}
             />
         </div>
     );

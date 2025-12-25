@@ -1,0 +1,60 @@
+import { dt, type LanguageMessages } from "@/lib/i18n/lib";
+
+export default {
+    dashboardTranslations: {
+        dashboard: "Dashboard",
+        last30Days: "Last 30 days",
+        fromToDate: dt("From {from:date} to {to:date}", {
+            date: {
+                from: {
+                    localeMatcher: "best fit",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                },
+                to: {
+                    localeMatcher: "best fit",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                },
+            }
+        }),
+        revenueLast7Days: "Revenue (last 7 days)",
+        vsPrevious7Days: "vs previous 7 days",
+        unpaidBalance: "Unpaid balance",
+        openOrdersAndReservations: "Open orders & reservations",
+        ordersToday: "Orders today",
+        reservationsToday: "Reservations today",
+        activeKidsNow: "Active kids now",
+        cafe: "Cafe",
+        playground: "Playground",
+        revenueTrend: "Revenue trend",
+        volumeTrend: "Volume trend",
+        cafeRevenue: "Cafe revenue",
+        playgroundRevenue: "Playground revenue",
+        orders: "Orders",
+        reservations: "Reservations",
+        topProducts: "Top products",
+        recentOrders: "Recent orders",
+        upcomingReservations: "Upcoming reservations",
+        next24Hours: "Next 24 hours",
+        latestActivity: "Latest activity",
+        viewOrders: "View orders",
+        viewReservations: "View reservations",
+        viewProducts: "View products",
+        noDataYet: "No data yet.",
+        none: "None",
+        noAccess: "No access",
+        product: "Product",
+        qty: "Qty",
+        revenue: "Revenue",
+        order: "Order",
+        status: "Status",
+        total: "Total",
+        kid: "Kid",
+        time: "Time",
+        noPermissionsHint:
+            "Your account does not have permission to view orders or reservations.",
+    },
+} as const satisfies LanguageMessages;
