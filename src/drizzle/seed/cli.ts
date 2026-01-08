@@ -16,6 +16,13 @@ const commands = {
       await seed();
     },
   },
+  admin: {
+    description: "Reset and seed all tables and seeds admin only.",
+    action: async () => {
+      const { seedAdmin } = await import("@/drizzle/seed");
+      await seedAdmin();
+    },
+  },
   help: {
     description: "Show this help message.",
     action: async () => {

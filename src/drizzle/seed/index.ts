@@ -93,3 +93,7 @@ export async function seedAll({
 export async function seed() {
     await seedAll({ yearsBack: 2, minPerDay: 10, maxPerDay: 30 });
 }
+
+export async function seedAdmin() {
+    await seedAdminUser();
+}
