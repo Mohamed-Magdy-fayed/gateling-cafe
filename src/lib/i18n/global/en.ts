@@ -18,7 +18,7 @@ export default {
   hobby: dt("You chose {hobby:enum} as your hobby.", {
     enum: { hobby: { runner: "runner", developer: "developer" } },
   }),
-  appName: "Lavida Jungle Play",
+  appName: "Lavida Jungle",
   common: {
     menu: "Menu",
     today: "Today",

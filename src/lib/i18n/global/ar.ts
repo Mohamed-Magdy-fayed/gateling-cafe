@@ -18,7 +18,7 @@ export default {
   hobby: dt("اخترت {hobby:enum} كهوايتك.", {
     enum: { hobby: { runner: "عداء", developer: "مطور" } },
   }),
-  appName: "Lavida Jungle Play",
+  appName: "Lavida Jungle",
   common: {
     menu: "القائمة",
     today: "اليوم",
