@@ -17,9 +17,8 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { NumberInput } from "@/components/ui/number-input";
 import { SheetFooter } from "@/components/ui/sheet";
-import { type Reservation, reservationStatus } from "@/drizzle/schema";
+import type { Reservation } from "@/drizzle/schema";
 import {
     createReservation,
     editReservations,
@@ -60,24 +59,21 @@ export function ReservationsForm({
             ? {
                 customerName: reservation.customerName ?? "",
                 customerPhone: reservation.customerPhone ?? "",
-                totalPaid: reservation.totalPaid ?? undefined,
                 notes: reservation.notes ?? "",
                 playtimeOptionId: reservation.playtimeOptionId ?? "",
                 reservationCode: reservation.reservationCode ?? "",
-                status: reservation.status,
             }
             : {
                 reservationCode: "",
                 customerName: "",
                 customerPhone: "",
                 playtimeOptionId: "",
-                totalPaid: undefined,
                 notes: "",
-                status: "reserved",
             },
     });
 
     const id = form.watch("playtimeOptionId");
+    const reservationCode = form.watch("reservationCode");
     const selectedPlaytime = useMemo(() => {
         return playtimeOptions.find((o) => o.value === id) ?? null;
     }, [playtimeOptions, form, id]);
@@ -91,7 +87,6 @@ export function ReservationsForm({
                 customerName: data.customerName,
                 customerPhone: data.customerPhone,
                 playtimeOptionId: data.playtimeOptionId ?? "",
-                totalPaid: data.totalPaid ?? 0,
                 notes: data.notes,
             };
 
@@ -100,7 +95,6 @@ export function ReservationsForm({
             const payload: Partial<ReservationUpdateValues> = {
                 customerName: data.customerName,
                 customerPhone: data.customerPhone,
-                totalPaid: data.totalPaid,
                 notes: data.notes,
             };
 
@@ -146,23 +140,27 @@ export function ReservationsForm({
         <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmit)}>
                 <SheetFooter>
-                    {!reservation ? (
-                        <FormField
-                            control={form.control}
-                            name="reservationCode"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>
-                                        {t("reservationsTranslations.reservationCode")}
-                                    </FormLabel>
-                                    <FormControl>
-                                        <Badge>{field.value ?? t("common.loading")}</Badge>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    ) : null}
+                    <div className="flex items-center gap-2 justify-between">
+                        <FormItem>
+                            <FormLabel>
+                                {t("reservationsTranslations.reservationCode")}
+                            </FormLabel>
+                            <FormControl>
+                                <Badge>{reservationCode ?? t("common.loading")}</Badge>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        <FormItem>
+                            <FormLabel>{t("reservationsTranslations.totalPrice")}</FormLabel>
+                            <FormControl>
+                                <Badge>
+                                    {selectedPlaytime
+                                        ? formatCurrency(selectedPlaytime.price)
+                                        : isPending ? t("common.loading") : t("reservationsTranslations.selectPlaytimeOption")}
+                                </Badge>
+                            </FormControl>
+                        </FormItem>
+                    </div>
                     <FormField
                         control={form.control}
                         name="customerName"
@@ -225,57 +223,6 @@ export function ReservationsForm({
                         )}
                     />
 
-                    <FormItem>
-                        <FormLabel>{t("reservationsTranslations.totalPrice")}</FormLabel>
-                        <FormControl>
-                            <Badge>
-                                {selectedPlaytime
-                                    ? formatCurrency(selectedPlaytime.price)
-                                    : t("common.loading")}
-                            </Badge>
-                        </FormControl>
-                    </FormItem>
-                    <FormField
-                        control={form.control}
-                        name={"totalPaid"}
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>{t("reservationsTranslations.totalPaid")}</FormLabel>
-                                <FormControl>
-                                    <NumberInput
-                                        placeholder={t(
-                                            "reservationsTranslations.totalPaidPlaceholder",
-                                        )}
-                                        {...field}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="status"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>{t("reservationsTranslations.status")}</FormLabel>
-                                <FormControl>
-                                    <SelectField
-                                        options={reservationStatus.map((status) => ({
-                                            value: status,
-                                            label: t("reservationsTranslations.statusNames", {
-                                                statusName: status,
-                                            }),
-                                        }))}
-                                        setValues={(values) => field.onChange(values[0])}
-                                        values={[field.value]}
-                                        title={t("reservationsTranslations.status")}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
                     <div className="flex items-center justify-between gap-4">
                         <Button
                             disabled={form.formState.isSubmitting || isPending}

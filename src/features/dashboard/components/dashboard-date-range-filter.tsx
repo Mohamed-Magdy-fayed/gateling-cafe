@@ -116,7 +116,7 @@ export function DashboardDateRangeFilter({
                 <Button
                     variant="outline"
                     size="sm"
-                    className="border-dashed"
+                    className="border-dashed w-fit"
                     aria-label={t("dataTable.clearFilter", { title })}
                     tabIndex={0}
                 >

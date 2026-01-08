@@ -50,6 +50,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
     const canViewOrders = hasPermission(user, "orders", "view");
     const canViewReservations = hasPermission(user, "reservations", "view");
+    const canCloseDay = user.role === "admin";
 
     const now = new Date();
 
@@ -77,6 +78,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             snapshot={snapshot}
             canViewOrders={canViewOrders}
             canViewReservations={canViewReservations}
+            canCloseDay={canCloseDay}
         />
     );
 }

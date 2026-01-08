@@ -1,6 +1,6 @@
 "use client";
 
-import { CoffeeIcon, LogOutIcon, MenuIcon, XIcon } from "lucide-react";
+import { LogOutIcon, MenuIcon, XIcon } from "lucide-react";
 import Image from "next/image";
 // import Image from "next/image";
 import Link from "next/link";
@@ -11,7 +11,7 @@ import { useAuth } from "@/auth/nextjs/components/auth-provider";
 import { DarkModeSwitcher } from "@/components/general/dark-mode-switcher";
 import { LanguageSwitcher } from "@/components/general/language-switcher";
 import { LoadingSpinner } from "@/components/general/loading-spinner";
-import WrapWithTooltip from "@/components/general/wrap-with-tooltip";
+import { WrapWithTooltip } from "@/components/general/wrap-with-tooltip";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,

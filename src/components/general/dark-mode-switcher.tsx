@@ -3,7 +3,7 @@
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { ComponentProps } from "react";
-import WrapWithTooltip from "@/components/general/wrap-with-tooltip";
+import { WrapWithTooltip } from "@/components/general/wrap-with-tooltip";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { cn } from "@/lib/utils";

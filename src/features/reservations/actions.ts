@@ -2,7 +2,16 @@
 
 import { Buffer } from "node:buffer";
 import { createHash } from "crypto";
-import { and, between, count, desc, eq, inArray, isNull, lte } from "drizzle-orm";
+import {
+    and,
+    between,
+    count,
+    desc,
+    eq,
+    inArray,
+    isNull,
+    lte,
+} from "drizzle-orm";
 import { HumeClient } from "hume";
 import { revalidatePath } from "next/cache";
 
@@ -17,6 +26,7 @@ import {
 } from "@/drizzle/schemas/kids/playtime-options-table";
 import { TTSCacheTable } from "@/drizzle/schemas/kids/tts-cache-table";
 import { TTSSettingsTable } from "@/drizzle/schemas/kids/tts-settings-table";
+import { getActiveShift } from "@/features/dashboard/get-active-shift";
 import { insertOrGetCustomer } from "@/features/helpers";
 import {
     type ReservationCreateValues,
@@ -260,6 +270,15 @@ export async function createReservation(
             return { error: true, message: "Unauthorized" };
         }
 
+        const activeShift = await getActiveShift();
+        if (!activeShift) {
+            const { t } = await getT();
+            return {
+                error: true,
+                message: t("reservationsTranslations.shiftRequired"),
+            };
+        }
+
         const { success, data: reservationData } =
             reservationCreateSchema.safeParse(data);
 
@@ -292,7 +311,7 @@ export async function createReservation(
             createdBy: user.email,
             customerName: reservationData.customerName,
             customerPhone: reservationData.customerPhone,
-            totalSpent: reservationData.totalPaid,
+            totalSpent: playtimeOption.price,
         });
 
         const reservation = await db
@@ -307,7 +326,7 @@ export async function createReservation(
                 startTime,
                 endTime,
                 totalPrice: playtimeOption.price,
-                totalPaid: reservationData.totalPaid,
+                totalPaid: playtimeOption.price,
                 status: "reserved",
                 notes: reservationData.notes,
             })
@@ -392,7 +411,10 @@ export async function autoStartDueReservationsAction(): Promise<
             )
             .returning({ id: ReservationsTable.id });
 
-        revalidatePath("/reservations");
+        if (updated.length > 0) {
+            revalidatePath("/reservations");
+        }
+
         return { error: false, data: updated.length };
     } catch (error) {
         return { error: true, message: (error as Error).message };
@@ -439,16 +461,20 @@ export async function endReservationIfTimedOutAction(input: {
             return { error: true, message: "Not timed out" };
         }
 
-        await db
+        const ended = await db
             .update(ReservationsTable)
             .set({
                 status: "ended",
                 updatedAt: new Date(),
                 updatedBy: user.email,
             })
-            .where(eq(ReservationsTable.id, input.id));
+            .where(eq(ReservationsTable.id, input.id))
+            .returning({ id: ReservationsTable.id });
 
-        revalidatePath("/reservations");
+        if (ended.length > 0) {
+            revalidatePath("/reservations");
+        }
+
         return { error: false, data: true };
     } catch (error) {
         return { error: true, message: (error as Error).message };

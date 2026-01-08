@@ -12,15 +12,8 @@ const commands = {
   all: {
     description: "Reset and seed all tables with demo data (also seeds admin).",
     action: async () => {
-      const { seedAll } = await import("@/drizzle/seed");
-      await seedAll();
-    },
-  },
-  admin: {
-    description: "Seed only the admin user (no other tables).",
-    action: async () => {
-      const { seedAdminUser } = await import("@/drizzle/seed");
-      await seedAdminUser();
+      const { seed } = await import("@/drizzle/seed");
+      await seed();
     },
   },
   help: {

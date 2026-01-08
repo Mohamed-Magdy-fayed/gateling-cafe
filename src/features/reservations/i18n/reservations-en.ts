@@ -44,6 +44,7 @@ export default {
                 },
             },
         ),
+        selectPlaytimeOption: "Select a playtime option first",
         playtimeOption: "Play time",
         playtimeOptions: "Play times",
         playtimeSettings: {
@@ -63,5 +64,6 @@ export default {
             helpText: "Use {name} to insert the child name.",
             savedToast: "Announcement templates saved",
         },
+        shiftRequired: "Open a shift before creating reservations",
     },
 } as const satisfies LanguageMessages;

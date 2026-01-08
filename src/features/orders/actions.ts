@@ -1,6 +1,15 @@
 "use server";
 
-import { and, between, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import {
+    and,
+    between,
+    count,
+    DrizzleQueryError,
+    desc,
+    eq,
+    inArray,
+    isNull,
+} from "drizzle-orm";
 import z from "zod";
 import { hasPermission } from "@/auth/core/permissions";
 import { getCurrentUser } from "@/auth/nextjs/get-current-user";
@@ -12,6 +21,7 @@ import {
     orderStatuses,
     ProductsTable,
 } from "@/drizzle/schema";
+import { getActiveShift } from "@/features/dashboard/get-active-shift";
 import { insertOrGetCustomer } from "@/features/helpers";
 import { generateOrderNumber } from "@/features/orders/utils";
 import { getT } from "@/lib/i18n/actions";
@@ -74,6 +84,15 @@ export async function createOrder(
         const user = await getCurrentUser({ redirectIfNotFound: true });
         if (!hasPermission(user, "orders", "create")) {
             return { error: true, message: "Unauthorized" };
+        }
+
+        const activeShift = await getActiveShift();
+        if (!activeShift) {
+            const { t } = await getT();
+            return {
+                error: true,
+                message: t("ordersTranslations.shiftRequired"),
+            };
         }
 
         const { success, data: orderData } = orderFormSchema.safeParse(data);
@@ -183,7 +202,15 @@ export async function createOrder(
             data: order,
         };
     } catch (error) {
-        return { error: true, message: (error as Error).message };
+        return {
+            error: true,
+            message:
+                error instanceof DrizzleQueryError
+                    ? `${error.cause?.message}`
+                    : error instanceof Error
+                        ? error.message
+                        : JSON.stringify(error),
+        };
     }
 }
 
@@ -433,9 +460,7 @@ export async function getOrderFormProducts() {
     };
 }
 
-export async function getOrderProducts(
-    orderId: string,
-): Promise<
+export async function getOrderProducts(orderId: string): Promise<
     ServerActionResponse<
         {
             productId: string;

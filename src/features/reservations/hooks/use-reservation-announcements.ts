@@ -1,19 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Reservation } from "@/drizzle/schema";
 import { endReservationIfTimedOutAction, getTTSUrl } from "@/features/reservations/actions";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+
+// Auto-end and optionally announce overdue reservations.
+const STALE_ANNOUNCEMENT_THRESHOLD_MS = 10 * 60_000;
 
 function toDate(value: Reservation["endTime"]): Date | null {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function playAudio(url: string) {
-    const audio = new Audio(url);
+// Ask the browser for audio permission/unlock so playback works even when the tab refocuses later.
+function useAudioUnlock() {
+    const unlockedRef = useRef(false);
+    const [asked, setAsked] = useState(false);
 
+    const ensureUnlocked = useCallback(async () => {
+        if (typeof window === "undefined") return false;
+        if (unlockedRef.current) return true;
+
+        // Try to resume an AudioContext (works on most browsers after a user gesture).
+        try {
+            // @ts-expect-error - AudioContext is global in browsers
+            const ctx = new AudioContext();
+            if (ctx.state === "suspended") {
+                await ctx.resume();
+            }
+            unlockedRef.current = ctx.state === "running";
+            setAsked(true);
+            return unlockedRef.current;
+        } catch (error) {
+            console.warn("Audio unlock failed", error);
+            setAsked(true);
+            return false;
+        }
+    }, []);
+
+    // If not unlocked, prompt the user once via toast to click anywhere to allow audio.
+    useEffect(() => {
+        if (asked || unlockedRef.current) return;
+        const handler = () => {
+            void ensureUnlocked();
+            window.removeEventListener("pointerdown", handler);
+        };
+        window.addEventListener("pointerdown", handler, { once: true });
+        return () => window.removeEventListener("pointerdown", handler);
+    }, [asked, ensureUnlocked]);
+
+    return ensureUnlocked;
+}
+
+async function playAudio(url: string, ensureAudio: () => Promise<boolean>) {
+    const canPlay = await ensureAudio();
+    if (!canPlay) {
+        toast.warning("Allow audio playback to hear announcements.");
+    }
+
+    const audio = new Audio(url);
     return new Promise<void>((resolve, reject) => {
         const onEnded = () => resolve();
         const onError = () => reject(new Error("Failed to play announcement audio"));
@@ -26,130 +73,98 @@ function playAudio(url: string) {
 }
 
 export function useReservationAnnouncements(reservations: Reservation[]) {
-    const { t, locale } = useTranslation();
-    const [_, startTransition] = useTransition();
-    const announcedIdsRef = useRef(new Set<string>());
-    const isAnnouncingRef = useRef(false);
+    const { t } = useTranslation();
+    const ensureAudio = useAudioUnlock();
 
+    const processed = useRef<Set<string>>(new Set());
     const reservationsRef = useRef(reservations);
     useEffect(() => {
         reservationsRef.current = reservations;
     }, [reservations]);
 
-    const announce = useCallback(
-        (reservation: Reservation) => {
-            if (
-                reservation.status === "ended" ||
-                reservation.status === "cancelled" ||
-                isAnnouncingRef.current
-            ) {
-                return;
-            }
+    const isRunningRef = useRef(false);
 
-            const endTime = toDate(reservation.endTime);
-            if (!endTime || announcedIdsRef.current.has(reservation.id)) {
-                return;
-            }
-
-            // Mark as in-progress to prevent duplicate triggers until this completes.
-            announcedIdsRef.current.add(reservation.id);
-            isAnnouncingRef.current = true;
-
-            startTransition(async () => {
-                try {
-                    const response = await endReservationIfTimedOutAction({
-                        id: reservation.id,
-                    });
-
-                    if (response.error) {
-                        if (response.message !== "Not timed out") {
-                            toast.error(response.message);
-                        }
-                        announcedIdsRef.current.delete(reservation.id);
-                        return;
+    const processReservation = useCallback(
+        async (reservation: Reservation, mode: "announce" | "silent") => {
+            try {
+                const response = await endReservationIfTimedOutAction({ id: reservation.id });
+                if (response.error) {
+                    if (response.message !== "Not timed out") {
+                        toast.error(response.message);
                     }
-
-                    const name = reservation.customerName.trim();
-
-                    const { enUrl, arUrl } = await getTTSUrl(name);
-                    await playAudio(enUrl);
-                    await playAudio(arUrl);
-
-                    const toastTitle = t(
-                        "reservationsTranslations.childPickupToastTitle",
-                        {
-                            customerName: name,
-                        },
-                    );
-                    const toastDescription = t(
-                        "reservationsTranslations.childPickupToastDescription",
-                        {
-                            customerName: name,
-                            endTime,
-                        },
-                    );
-
-                    toast.info(toastTitle, { description: toastDescription });
-                } catch (error) {
-                    announcedIdsRef.current.delete(reservation.id);
-                    toast.error((error as Error).message);
-                } finally {
-                    isAnnouncingRef.current = false;
+                    return;
                 }
-            });
+
+                if (mode === "announce") {
+                    const name = reservation.customerName.trim();
+                    const { enUrl, arUrl } = await getTTSUrl(name);
+                    await playAudio(enUrl, ensureAudio);
+                    await playAudio(arUrl, ensureAudio);
+
+                    toast.info(
+                        t("reservationsTranslations.childPickupToastTitle", { customerName: name }),
+                        {
+                            description: t(
+                                "reservationsTranslations.childPickupToastDescription",
+                                {
+                                    customerName: name,
+                                    endTime: toDate(reservation.endTime),
+                                },
+                            ),
+                        },
+                    );
+                }
+
+                processed.current.add(reservation.id);
+                reservationsRef.current = reservationsRef.current.map((item) =>
+                    item.id === reservation.id ? { ...item, status: "ended" } : item,
+                );
+            } catch (error) {
+                toast.error((error as Error).message);
+            }
         },
-        [locale, startTransition, t],
+        [ensureAudio, t],
     );
 
     useEffect(() => {
-        if (typeof window === "undefined") {
-            return;
-        }
+        if (typeof window === "undefined") return;
 
-        const check = () => {
+        const run = () => {
+            if (isRunningRef.current) return;
             const now = Date.now();
-            for (const reservation of reservationsRef.current) {
-                if (
-                    reservation.status === "ended" ||
-                    reservation.status === "cancelled" ||
-                    announcedIdsRef.current.has(reservation.id)
-                ) {
-                    continue;
-                }
 
-                const endTime = toDate(reservation.endTime);
-                if (!endTime) continue;
+            const target = reservationsRef.current.find((reservation) => {
+                if (processed.current.has(reservation.id)) return false;
+                if (reservation.status === "ended" || reservation.status === "cancelled") return false;
 
-                if (endTime.getTime() <= now) {
-                    announce(reservation);
-                    // Only attempt one per tick to keep audio/tts serial.
-                    break;
-                }
-            }
+                const end = toDate(reservation.endTime);
+                if (!end) return false;
+                return end.getTime() <= now;
+            });
+
+            if (!target) return;
+
+            isRunningRef.current = true;
+
+            const mode = (() => {
+                const end = toDate(target.endTime);
+                if (!end) return "silent" as const;
+                const overdue = now - end.getTime();
+                return overdue > STALE_ANNOUNCEMENT_THRESHOLD_MS ? "silent" : "announce";
+            })();
+
+            void processReservation(target, mode).finally(() => {
+                isRunningRef.current = false;
+            });
         };
 
-        check();
-
-        const interval = window.setInterval(check, 30_000);
-        const onVisibility = () => {
-            if (document.visibilityState === "visible") check();
-        };
-
-        window.addEventListener("focus", check);
-        document.addEventListener("visibilitychange", onVisibility);
+        run();
+        const interval = window.setInterval(run, 30_000);
+        window.addEventListener("focus", run);
 
         return () => {
             window.clearInterval(interval);
-            window.removeEventListener("focus", check);
-            document.removeEventListener("visibilitychange", onVisibility);
+            window.removeEventListener("focus", run);
         };
-    }, [announce]);
-
-    useEffect(() => {
-        return () => {
-            if (typeof window !== "undefined" && window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-            }
-        };
-    }, []);
+    }, [processReservation]);
 }

@@ -19,16 +19,22 @@ import { cn } from "@/lib/utils";
 interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
   actionBar?: React.ReactNode;
+  hidePagination?: boolean;
 }
 
 export function DataTable<TData>({
   table,
   actionBar,
+  hidePagination = false,
   children,
   className,
   ...props
 }: DataTableProps<TData>) {
   const { t } = useTranslation();
+  const hasSelectedRows =
+    table.getFilteredSelectedRowModel().rows.length > 0;
+  const shouldRenderFooter = !hidePagination || (actionBar && hasSelectedRows);
+
   return (
     <div
       className={cn("flex w-full flex-col gap-2.5 overflow-auto", className)}
@@ -94,12 +100,12 @@ export function DataTable<TData>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex flex-col gap-2.5">
-        <DataTablePagination table={table} />
-        {actionBar &&
-          table.getFilteredSelectedRowModel().rows.length > 0 &&
-          actionBar}
-      </div>
+      {shouldRenderFooter && (
+        <div className="flex flex-col gap-2.5">
+          {!hidePagination && <DataTablePagination table={table} />}
+          {actionBar && hasSelectedRows && actionBar}
+        </div>
+      )}
     </div>
   );
 }

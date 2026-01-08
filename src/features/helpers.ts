@@ -7,6 +7,9 @@ type CustomerInput = {
     customerPhone: string;
     createdBy: string;
     totalSpent: number;
+    createdAt?: Date;
+    updatedAt?: Date;
+    updatedBy?: string;
 };
 
 export async function insertOrGetCustomer({
@@ -14,6 +17,9 @@ export async function insertOrGetCustomer({
     customerPhone,
     createdBy,
     totalSpent,
+    createdAt,
+    updatedAt,
+    updatedBy,
 }: CustomerInput) {
     const existingCustomer = await db
         .select()
@@ -29,6 +35,9 @@ export async function insertOrGetCustomer({
                 phone: customerPhone,
                 createdBy,
                 totalSpent,
+                ...(createdAt ? { createdAt } : {}),
+                ...(updatedAt ? { updatedAt } : {}),
+                ...(updatedBy ? { updatedBy } : {}),
             })
             .returning()
             .then((res) => res[0]);
@@ -39,6 +48,8 @@ export async function insertOrGetCustomer({
             .update(CustomersTable)
             .set({
                 totalSpent: existingCustomer.totalSpent + totalSpent,
+                ...(updatedAt ? { updatedAt } : {}),
+                ...(updatedBy ? { updatedBy } : {}),
             })
             .where(eq(CustomersTable.id, existingCustomer.id))
             .returning()

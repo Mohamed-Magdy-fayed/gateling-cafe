@@ -42,5 +42,6 @@ export default {
         amountPaid: "المبلغ المدفوع",
         balanceDue: "المتبقي",
         totalPaidHelper: "سجل المبلغ الذي دفعه العميل نقدًا أو بالبطاقة.",
+        shiftRequired: "يرجى فتح الشيفت قبل إنشاء الطلبات",
     },
 } as const satisfies LanguageMessages;

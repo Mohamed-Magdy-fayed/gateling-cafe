@@ -42,5 +42,6 @@ export default {
         amountPaid: "Amount Paid",
         balanceDue: "Balance Due",
         totalPaidHelper: "Record how much cash or card payment was collected.",
+        shiftRequired: "Open a shift before creating orders",
     },
 } as const satisfies LanguageMessages;

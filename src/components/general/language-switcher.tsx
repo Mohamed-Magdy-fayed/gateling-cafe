@@ -2,7 +2,7 @@
 
 import { GlobeIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import WrapWithTooltip from "@/components/general/wrap-with-tooltip";
+import { WrapWithTooltip } from "@/components/general/wrap-with-tooltip";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { cn } from "@/lib/utils";

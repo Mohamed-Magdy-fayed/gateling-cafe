@@ -1,8 +1,10 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import type { ComponentProps } from "react";
 import {
     DataTableColumnHeader,
     selectColumn,
 } from "@/components/data-table/data-table-column-header";
+import { Badge } from "@/components/ui/badge";
 import type { Reservation } from "@/drizzle/schema";
 import { ReservationsActions } from "@/features/reservations/components/reservations-actions";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -22,7 +24,10 @@ export const getReservationsColumns = ({
         {
             accessorKey: "reservationCode",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.reservationCode")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.reservationCode")}
+                />
             ),
             meta: {
                 label: getTranslation("reservationsTranslations.reservationCode"),
@@ -33,7 +38,10 @@ export const getReservationsColumns = ({
         {
             accessorKey: "customerName",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.customerName")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.customerName")}
+                />
             ),
             meta: {
                 label: getTranslation("reservationsTranslations.customerName"),
@@ -44,7 +52,10 @@ export const getReservationsColumns = ({
         {
             accessorKey: "customerPhone",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.customerPhone")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.customerPhone")}
+                />
             ),
             meta: {
                 label: getTranslation("reservationsTranslations.customerPhone"),
@@ -54,9 +65,18 @@ export const getReservationsColumns = ({
         {
             accessorKey: "status",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.status")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.status")}
+                />
             ),
-            cell: ({ row }) => getTranslation("reservationsTranslations.statusNames", { statusName: row.original.status }),
+            cell: ({ row }) => (
+                <Badge className={row.original.status === "started" ? "bg-destructive text-destructive-foreground border-destructive" : undefined} variant={getStatusVariant(row.original.status)}>
+                    {getTranslation("reservationsTranslations.statusNames", {
+                        statusName: row.original.status,
+                    })}
+                </Badge>
+            ),
             meta: {
                 label: getTranslation("reservationsTranslations.status"),
                 variant: "multiSelect",
@@ -67,7 +87,10 @@ export const getReservationsColumns = ({
         {
             accessorKey: "totalPrice",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.totalPrice")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.totalPrice")}
+                />
             ),
             cell: ({ row }) => formatCurrency(row.original.totalPrice),
             meta: {
@@ -79,7 +102,10 @@ export const getReservationsColumns = ({
         {
             accessorKey: "totalPaid",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.totalPaid")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.totalPaid")}
+                />
             ),
             cell: ({ row }) => formatCurrency(row.original.totalPaid || 0),
             meta: {
@@ -91,9 +117,19 @@ export const getReservationsColumns = ({
         {
             accessorKey: "startTime",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.startTime")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.startTime")}
+                />
             ),
-            cell: ({ row }) => formatDate(row.original.startTime, { month: undefined, year: undefined, day: undefined, hour: "2-digit", minute: "2-digit" }),
+            cell: ({ row }) =>
+                formatDate(row.original.startTime, {
+                    month: undefined,
+                    year: undefined,
+                    day: undefined,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                }),
             meta: {
                 variant: "dateRange",
                 label: getTranslation("reservationsTranslations.startTime"),
@@ -103,9 +139,19 @@ export const getReservationsColumns = ({
         {
             accessorKey: "endTime",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("reservationsTranslations.endTime")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.endTime")}
+                />
             ),
-            cell: ({ row }) => formatDate(row.original.endTime, { month: undefined, year: undefined, day: undefined, hour: "2-digit", minute: "2-digit" }),
+            cell: ({ row }) =>
+                formatDate(row.original.endTime, {
+                    month: undefined,
+                    year: undefined,
+                    day: undefined,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                }),
             meta: {
                 variant: "dateRange",
                 label: getTranslation("reservationsTranslations.endTime"),
@@ -115,7 +161,10 @@ export const getReservationsColumns = ({
         {
             accessorKey: "createdAt",
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={getTranslation("common.createdAt")} />
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("common.createdAt")}
+                />
             ),
             cell: ({ row }) => formatDate(row.original.createdAt),
             meta: {
@@ -131,3 +180,18 @@ export const getReservationsColumns = ({
         },
     ] satisfies ColumnDef<Reservation>[];
 };
+
+function getStatusVariant(
+    status: Reservation["status"],
+): ComponentProps<typeof Badge>["variant"] {
+    switch (status) {
+        case "reserved":
+            return "default";
+        case "started":
+            return "outline";
+        case "cancelled":
+            return "destructive";
+        default:
+            return "secondary";
+    }
+}

@@ -1,1 +1,0 @@
-ALTER TYPE "public"."user_screens" ADD VALUE 'orders';

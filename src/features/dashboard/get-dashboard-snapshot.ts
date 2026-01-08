@@ -8,13 +8,17 @@ import {
     desc,
     eq,
     gt,
+    gte,
     inArray,
     isNull,
+    lte,
+    not,
     sql,
 } from "drizzle-orm";
 
 import { db } from "@/drizzle";
 import {
+    DailyCashClosuresTable,
     OrdersProductsTable,
     OrdersTable,
     ProductsTable,
@@ -84,10 +88,39 @@ export type DashboardSnapshot = {
         cafeRevenueLast7Days: number;
         playgroundRevenueLast7Days: number;
         unpaidBalanceOpen: number;
+        reservationsRevenueToday: number;
+        ordersRevenueToday: number;
         ordersToday: number;
         reservationsToday: number;
         activeKidsNow: number;
     };
+    dayClosure: {
+        id: string;
+        closedDate: string;
+        openedAt: string;
+        openedBy: string;
+        closedAt: string | null;
+        closedBy: string | null;
+        expectedOrdersCents: number | null;
+        expectedReservationsCents: number | null;
+        expectedTotalCents: number | null;
+        actualCashCents: number | null;
+        differenceCents: number | null;
+        notes: string | null;
+        createdBy: string;
+        createdAt: string;
+    } | null;
+    shiftHistory: Array<{
+        id: string;
+        openedAt: string;
+        openedBy: string;
+        closedAt: string;
+        closedBy: string | null;
+        expectedTotalCents: number | null;
+        actualCashCents: number | null;
+        differenceCents: number | null;
+        notes: string | null;
+    }>;
     seriesRevenueTrend: Array<{
         day: string;
         cafeRevenue: number;
@@ -331,6 +364,40 @@ export async function getDashboardSnapshot({
             .then((r) => r[0]?.value ?? 0)
         : 0;
 
+    const ordersRevenueToday = includeOrders
+        ? await db
+            .select({
+                value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
+                    .mapWith(Number)
+                    .as("value"),
+            })
+            .from(OrdersTable)
+            .where(
+                and(
+                    isNull(OrdersTable.deletedAt),
+                    between(OrdersTable.createdAt, todayFrom, todayTo),
+                ),
+            )
+            .then((r) => r[0]?.value ?? 0)
+        : 0;
+
+    const reservationsRevenueToday = includeReservations
+        ? await db
+            .select({
+                value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
+                    .mapWith(Number)
+                    .as("value"),
+            })
+            .from(ReservationsTable)
+            .where(
+                and(
+                    isNull(ReservationsTable.deletedAt),
+                    between(ReservationsTable.createdAt, todayFrom, todayTo),
+                ),
+            )
+            .then((r) => r[0]?.value ?? 0)
+        : 0;
+
     const activeKidsNow = includeReservations
         ? await db
             .select({ value: count().mapWith(Number).as("value") })
@@ -344,6 +411,91 @@ export async function getDashboardSnapshot({
             )
             .then((r) => r[0]?.value ?? 0)
         : 0;
+
+    const activeShift = includeOrders || includeReservations
+        ? await db.query.DailyCashClosuresTable.findFirst({
+            where: and(
+                isNull(DailyCashClosuresTable.closedAt),
+                isNull(DailyCashClosuresTable.deletedAt),
+            ),
+        })
+        : null;
+
+    let shiftOrdersTotal = 0;
+    let shiftReservationsTotal = 0;
+
+    if (activeShift) {
+        const shiftStart = activeShift.openedAt;
+        const shiftEnd = now;
+
+        if (includeOrders) {
+            shiftOrdersTotal = await db
+                .select({
+                    value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
+                        .mapWith(Number)
+                        .as("value"),
+                })
+                .from(OrdersTable)
+                .where(
+                    and(
+                        isNull(OrdersTable.deletedAt),
+                        between(OrdersTable.createdAt, shiftStart, shiftEnd),
+                    ),
+                )
+                .then((r) => r[0]?.value ?? 0);
+        }
+
+        if (includeReservations) {
+            shiftReservationsTotal = await db
+                .select({
+                    value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
+                        .mapWith(Number)
+                        .as("value"),
+                })
+                .from(ReservationsTable)
+                .where(
+                    and(
+                        isNull(ReservationsTable.deletedAt),
+                        between(ReservationsTable.createdAt, shiftStart, shiftEnd),
+                    ),
+                )
+                .then((r) => r[0]?.value ?? 0);
+        }
+    }
+
+    const sevenDaysAgo = startOfDay(addDays(now, -6));
+
+    const shiftHistoryRows = await db
+        .select({
+            id: DailyCashClosuresTable.id,
+            openedAt: DailyCashClosuresTable.openedAt,
+            openedBy: DailyCashClosuresTable.openedBy,
+            closedAt: DailyCashClosuresTable.closedAt,
+            closedBy: DailyCashClosuresTable.closedBy,
+            expectedTotalCents: DailyCashClosuresTable.expectedTotalCents,
+            actualCashCents: DailyCashClosuresTable.actualCashCents,
+            differenceCents: DailyCashClosuresTable.differenceCents,
+            notes: DailyCashClosuresTable.notes,
+        })
+        .from(DailyCashClosuresTable)
+        .where(
+            and(
+                isNull(DailyCashClosuresTable.deletedAt),
+                not(isNull(DailyCashClosuresTable.closedAt)),
+                gte(DailyCashClosuresTable.closedAt, sevenDaysAgo),
+                lte(DailyCashClosuresTable.closedAt, now),
+            ),
+        )
+        .orderBy(desc(DailyCashClosuresTable.closedAt));
+
+    const dayClosureRecord = activeShift
+        ? {
+            ...activeShift,
+            expectedOrdersCents: includeOrders ? shiftOrdersTotal : null,
+            expectedReservationsCents: includeReservations ? shiftReservationsTotal : null,
+            expectedTotalCents: shiftOrdersTotal + shiftReservationsTotal,
+        }
+        : null;
 
     if (includeOrders) {
         const rows = await db
@@ -598,10 +750,43 @@ export async function getDashboardSnapshot({
             cafeRevenueLast7Days,
             playgroundRevenueLast7Days,
             unpaidBalanceOpen: unpaidCafe + unpaidPlayground,
+            reservationsRevenueToday,
+            ordersRevenueToday,
             ordersToday,
             reservationsToday,
             activeKidsNow,
         },
+        dayClosure: dayClosureRecord
+            ? {
+                id: dayClosureRecord.id,
+                closedDate: new Date(dayClosureRecord.closedDate).toISOString(),
+                openedAt: dayClosureRecord.openedAt.toISOString(),
+                openedBy: dayClosureRecord.openedBy,
+                closedAt: dayClosureRecord.closedAt?.toISOString() ?? null,
+                closedBy: dayClosureRecord.closedBy ?? null,
+                expectedOrdersCents: dayClosureRecord.expectedOrdersCents,
+                expectedReservationsCents: dayClosureRecord.expectedReservationsCents,
+                expectedTotalCents: dayClosureRecord.expectedTotalCents,
+                actualCashCents: dayClosureRecord.actualCashCents,
+                differenceCents: dayClosureRecord.differenceCents,
+                notes: dayClosureRecord.notes ?? null,
+                createdBy: dayClosureRecord.createdBy,
+                createdAt: dayClosureRecord.createdAt.toISOString(),
+            }
+            : null,
+        shiftHistory: shiftHistoryRows
+            .filter((row) => row.closedAt)
+            .map((row) => ({
+                id: row.id,
+                openedAt: row.openedAt.toISOString(),
+                openedBy: row.openedBy,
+                closedAt: row.closedAt!.toISOString(),
+                closedBy: row.closedBy ?? null,
+                expectedTotalCents: row.expectedTotalCents,
+                actualCashCents: row.actualCashCents,
+                differenceCents: row.differenceCents,
+                notes: row.notes ?? null,
+            })),
         seriesRevenueTrend: seriesRevenue,
         seriesVolumeTrend: seriesVolume,
         topProductsLast30Days,

@@ -3,6 +3,7 @@
 import {
   type ColumnDef,
   type ColumnFiltersState,
+  type FilterFn,
   getCoreRowModel,
   getFacetedMinMaxValues,
   getFacetedRowModel,
@@ -10,15 +11,14 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  type FilterFn,
   type PaginationState,
   type RowSelectionState,
   type SortingState,
   type TableOptions,
   type TableState,
-  type VisibilityState,
   type Updater,
   useReactTable,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import * as React from "react";
 
@@ -37,8 +37,10 @@ interface UseDataTableProps<TData>
   initialState?: Partial<TableState>;
 }
 
-const functionalUpdate = <T,>(updater: Updater<T>, previous: T): T =>
-  typeof updater === "function" ? (updater as (old: T) => T)(previous) : updater;
+const functionalUpdate = <T>(updater: Updater<T>, previous: T): T =>
+  typeof updater === "function"
+    ? (updater as (old: T) => T)(previous)
+    : updater;
 
 export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const {
@@ -54,8 +56,36 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     ...tableProps
   } = props;
 
+  const hasCreatedAtColumn = React.useMemo(() => {
+    const queue: ColumnDef<TData, unknown>[] = [...columns];
+
+    while (queue.length) {
+      const column = queue.shift();
+      if (!column) {
+        continue;
+      }
+
+      if ("columns" in column && Array.isArray(column.columns)) {
+        queue.push(...column.columns);
+      }
+
+      const columnId =
+        (typeof column.id === "string" && column.id) ||
+        ("accessorKey" in column && typeof column.accessorKey === "string"
+          ? column.accessorKey
+          : undefined);
+
+      if (columnId === "createdAt") {
+        return true;
+      }
+    }
+
+    return false;
+  }, [columns]);
+
   const [sorting, setSorting] = React.useState<SortingState>(
-    initialState?.sorting ?? [{ id: "createdAt", desc: true }],
+    initialState?.sorting ??
+    (hasCreatedAtColumn ? [{ id: "createdAt", desc: true }] : []),
   );
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     initialState?.columnFilters ?? [],
@@ -160,7 +190,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       columnPinning: {
         right: ["actions"],
         left: ["select"],
-      }
+      },
     },
     state: {
       sorting,

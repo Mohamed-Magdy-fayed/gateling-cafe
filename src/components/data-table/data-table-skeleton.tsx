@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -8,7 +9,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { ComponentProps } from "react";
 
 interface DataTableSkeletonProps extends ComponentProps<"div"> {
   columnCount: number;
@@ -45,8 +45,8 @@ export function DataTableSkeleton({
         <div className="flex flex-1 items-center gap-2">
           {filterCount > 0
             ? Array.from({ length: filterCount }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-[4.5rem] border-dashed" />
-              ))
+              <Skeleton key={i} className="h-7 w-[4.5rem] border-dashed" />
+            ))
             : null}
         </div>
         {withViewOptions ? (

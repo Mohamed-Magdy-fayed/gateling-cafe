@@ -44,6 +44,7 @@ export default {
                 },
             },
         ),
+        selectPlaytimeOption: "اختر مدة اللعب أولاً",
         playtimeOption: "مدة اللعب",
         playtimeOptions: "مدد اللعب",
         playtimeSettings: {
@@ -63,5 +64,6 @@ export default {
             helpText: "استخدم {name} لإدراج اسم الطفل.",
             savedToast: "تم حفظ نصوص الإعلان الصوتية",
         },
+        shiftRequired: "يرجى فتح الشيفت قبل إنشاء الحجوزات",
     },
 } as const satisfies LanguageMessages;

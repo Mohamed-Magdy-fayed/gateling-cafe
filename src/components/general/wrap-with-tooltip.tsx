@@ -1,15 +1,23 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-export default function WrapWithTooltip({ children, text, delay }: { children: ReactNode, text: string | ReactNode, delay?: number }) {
+export function WrapWithTooltip({
+    children,
+    text,
+    delay,
+}: {
+    children: ReactNode;
+    text: string | ReactNode;
+    delay?: number;
+}) {
     return (
         <Tooltip delayDuration={delay}>
-            <TooltipTrigger asChild>
-                {children}
-            </TooltipTrigger>
-            <TooltipContent>
-                {text}
-            </TooltipContent>
+            <TooltipTrigger asChild>{children}</TooltipTrigger>
+            <TooltipContent>{text}</TooltipContent>
         </Tooltip>
-    )
+    );
 }

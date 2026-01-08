@@ -1,17 +1,47 @@
-import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
-import { CheckIcon, DownloadCloudIcon, XCircleIcon } from 'lucide-react';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
-import { cn } from '@/lib/utils';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { exportToCsv } from '@/lib/export';
-import { StringKeyOf } from '@/types/data-table';
-import { DataTableActionBarAction } from '@/components/data-table/data-table-action-bar';
-import { useTranslation } from '@/lib/i18n/useTranslation';
+import { CheckIcon, DownloadCloudIcon, XCircleIcon } from "lucide-react";
+import {
+    type Dispatch,
+    type SetStateAction,
+    useCallback,
+    useState,
+} from "react";
+import { DataTableActionBarAction } from "@/components/data-table/data-table-action-bar";
+import { Badge } from "@/components/ui/badge";
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+    CommandSeparator,
+} from "@/components/ui/command";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { exportToCsv } from "@/lib/export";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { cn } from "@/lib/utils";
+import type { StringKeyOf } from "@/types/data-table";
 
-export default function ExportForm<TData>({ data, fileName, sheetName, selectedData, handleExport, isOpen, setIsOpen, isLoading }: {
-    data: TData[]; fileName: string; sheetName: string; isLoading: boolean; selectedData: TData[];
+export default function ExportForm<TData>({
+    data,
+    fileName,
+    sheetName,
+    selectedData,
+    handleExport,
+    isOpen,
+    setIsOpen,
+    isLoading,
+}: {
+    data: TData[];
+    fileName: string;
+    sheetName: string;
+    isLoading: boolean;
+    selectedData: TData[];
     isOpen: boolean;
     setIsOpen: Dispatch<SetStateAction<boolean>>;
     handleExport?: (keys: Extract<keyof TData, string>[]) => void;
@@ -37,7 +67,11 @@ export default function ExportForm<TData>({ data, fileName, sheetName, selectedD
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <DataTableActionBarAction variant="outline" size="sm" className="border-dashed">
+                <DataTableActionBarAction
+                    variant="outline"
+                    size="sm"
+                    className="border-dashed"
+                >
                     {exportKeys.length > 0 ? (
                         <div
                             role="button"
@@ -96,28 +130,34 @@ export default function ExportForm<TData>({ data, fileName, sheetName, selectedD
                     <CommandList className="max-h-full">
                         <CommandEmpty>{t("dataTable.noResults")}</CommandEmpty>
                         <CommandGroup className="max-h-[18.75rem] overflow-y-auto overflow-x-hidden">
-                            {data[0] ? Object.keys(data[0]).map((key) => {
-                                const isSelected = exportKeys.includes(key as StringKeyOf<TData>);
+                            {data[0]
+                                ? Object.keys(data[0]).map((key) => {
+                                    const isSelected = exportKeys.includes(
+                                        key as StringKeyOf<TData>,
+                                    );
 
-                                return (
-                                    <CommandItem
-                                        key={key}
-                                        onSelect={() => onItemSelect(key as StringKeyOf<TData>, isSelected)}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "flex size-4 items-center justify-center rounded-sm border border-primary",
-                                                isSelected
-                                                    ? "bg-primary"
-                                                    : "opacity-50 [&_svg]:invisible",
-                                            )}
+                                    return (
+                                        <CommandItem
+                                            key={key}
+                                            onSelect={() =>
+                                                onItemSelect(key as StringKeyOf<TData>, isSelected)
+                                            }
                                         >
-                                            <CheckIcon className="rtl:scale-100 dark:text-foreground text-background" />
-                                        </div>
-                                        <span className="truncate">{key}</span>
-                                    </CommandItem>
-                                );
-                            }) : null}
+                                            <div
+                                                className={cn(
+                                                    "flex size-4 items-center justify-center rounded-sm border border-primary",
+                                                    isSelected
+                                                        ? "bg-primary"
+                                                        : "opacity-50 [&_svg]:invisible",
+                                                )}
+                                            >
+                                                <CheckIcon className="rtl:scale-100 dark:text-foreground text-background" />
+                                            </div>
+                                            <span className="truncate">{key}</span>
+                                        </CommandItem>
+                                    );
+                                })
+                                : null}
                         </CommandGroup>
                         {exportKeys.length > 0 && (
                             <>
@@ -125,24 +165,33 @@ export default function ExportForm<TData>({ data, fileName, sheetName, selectedD
                                 <CommandGroup>
                                     <CommandItem
                                         onSelect={() => {
-                                            setIsOpen(false)
+                                            setIsOpen(false);
                                             if (selectedData.length > 0) {
                                                 const exportData = selectedData.map((item) =>
-                                                    exportKeys.reduce((acc, key) => {
-                                                        acc[key] = item[key];
-                                                        return acc;
-                                                    }, {} as Partial<TData>)
+                                                    exportKeys.reduce(
+                                                        (acc, key) => {
+                                                            acc[key] = item[key];
+                                                            return acc;
+                                                        },
+                                                        {} as Partial<TData>,
+                                                    ),
                                                 );
-                                                return exportToCsv(exportData, fileName)
+                                                return exportToCsv(exportData, fileName);
                                             }
                                             handleExport
                                                 ? handleExport(exportKeys)
-                                                : exportToCsv(data.map((item) =>
-                                                    exportKeys.reduce((acc, key) => {
-                                                        acc[key] = item[key];
-                                                        return acc;
-                                                    }, {} as Partial<TData>)
-                                                ), fileName);
+                                                : exportToCsv(
+                                                    data.map((item) =>
+                                                        exportKeys.reduce(
+                                                            (acc, key) => {
+                                                                acc[key] = item[key];
+                                                                return acc;
+                                                            },
+                                                            {} as Partial<TData>,
+                                                        ),
+                                                    ),
+                                                    fileName,
+                                                );
                                         }}
                                         className="justify-center text-center"
                                     >
@@ -155,6 +204,5 @@ export default function ExportForm<TData>({ data, fileName, sheetName, selectedD
                 </Command>
             </PopoverContent>
         </Popover>
-    )
+    );
 }
-

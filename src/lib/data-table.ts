@@ -1,8 +1,12 @@
-import { dataTableConfig } from "@/config/data-table";
-import { cn } from "@/lib/utils";
-import { FilterVariant, FilterOperator, ExtendedColumnFilter } from "@/types/data-table";
 import type { Column, FilterFn } from "@tanstack/react-table";
 import { endOfDay, startOfDay } from "date-fns";
+import { dataTableConfig } from "@/config/data-table";
+import { cn } from "@/lib/utils";
+import type {
+  ExtendedColumnFilter,
+  FilterOperator,
+  FilterVariant,
+} from "@/types/data-table";
 
 export function getCommonPinningStyles<TData>({
   column,
@@ -20,11 +24,7 @@ export function getCommonPinningStyles<TData>({
   const classes: (string | undefined | false)[] = [];
 
   if (isPinned) {
-    classes.push(
-      "sticky",
-      "z-10",
-      "bg-inherit",
-    );
+    classes.push("sticky", "z-10", "bg-inherit");
 
     if (isPinned === "left") {
       classes.push("start-0");
@@ -34,8 +34,10 @@ export function getCommonPinningStyles<TData>({
 
     if (withBorder) {
       classes.push(
-        isLastLeftPinnedColumn && "shadow-[-4px_0_4px_-4px_hsl(var(--border))_inset]",
-        isFirstRightPinnedColumn && "shadow-[4px_0_4px_-4px_hsl(var(--border))_inset]"
+        isLastLeftPinnedColumn &&
+        "shadow-[-4px_0_4px_-4px_hsl(var(--border))_inset]",
+        isFirstRightPinnedColumn &&
+        "shadow-[4px_0_4px_-4px_hsl(var(--border))_inset]",
       );
     }
   } else {
@@ -123,9 +125,7 @@ export const dateRangeFilterFn: FilterFn<unknown> = (row, columnId, filter) => {
 
   const valueTime = value.getTime();
 
-  const applyRange = (
-    range: Array<number | string | undefined>,
-  ): boolean => {
+  const applyRange = (range: Array<number | string | undefined>): boolean => {
     const [fromRaw, toRaw] = range;
     const fromDate = toDate(fromRaw);
     const toDateValue = toDate(toRaw);

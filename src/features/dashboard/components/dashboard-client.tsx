@@ -4,6 +4,7 @@ import { DashboardHeader, DashboardKpis } from "@/features/dashboard/components/
 import {
     RecentOrdersCard,
     RevenueTrendCard,
+    ShiftHistoryCard,
     TopProductsCard,
     UpcomingReservationsCard,
     VolumeTrendCard,
@@ -16,10 +17,12 @@ export function DashboardClient({
     snapshot,
     canViewOrders,
     canViewReservations,
+    canCloseDay,
 }: {
     snapshot: DashboardSnapshot;
     canViewOrders: boolean;
     canViewReservations: boolean;
+    canCloseDay: boolean;
 }) {
     const { t } = useTranslation();
 
@@ -51,6 +54,7 @@ export function DashboardClient({
                 snapshot={snapshot}
                 canViewOrders={canViewOrders}
                 canViewReservations={canViewReservations}
+                canCloseDay={canCloseDay}
             />
 
             <div className="grid gap-4 lg:grid-cols-2">
@@ -64,8 +68,8 @@ export function DashboardClient({
                     canViewOrders={canViewOrders}
                     defaultRange={defaultTopProducts}
                 />
-
-                <div className="space-y-4">
+                <ShiftHistoryCard history={snapshot.shiftHistory} />
+                {/* <div className="space-y-4">
                     <RecentOrdersCard
                         snapshot={snapshot}
                         canViewOrders={canViewOrders}
@@ -75,7 +79,7 @@ export function DashboardClient({
                         snapshot={snapshot}
                         canViewReservations={canViewReservations}
                     />
-                </div>
+                </div> */}
             </div>
 
             {!canViewOrders && !canViewReservations ? (
