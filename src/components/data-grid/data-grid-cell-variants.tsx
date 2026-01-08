@@ -43,6 +43,7 @@ import {
   getUrlHref,
   parseLocalDate,
 } from "@/lib/data-grid";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { cn } from "@/lib/utils";
 import type {
   CellSelectOption,
@@ -658,8 +659,9 @@ export function UrlCell<TData>({
       const href = getUrlHref(value);
       if (!href) {
         event.preventDefault();
-        toast.error(t("dataGrid.cells.url.invalidTitle"), {
-          description: t("dataGrid.cells.url.invalidDescription"),
+        toast.error("Invalid URL", {
+          description:
+            "URL contains a dangerous protocol (javascript:, data:, vbscript:, or file:)",
         });
         return;
       }
@@ -667,7 +669,7 @@ export function UrlCell<TData>({
       // Stop propagation to prevent grid from interfering with link navigation
       event.stopPropagation();
     },
-    [isEditing, t, value],
+    [isEditing, value],
   );
 
   React.useEffect(() => {
