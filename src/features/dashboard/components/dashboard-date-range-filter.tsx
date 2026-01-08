@@ -49,6 +49,7 @@ export function DashboardDateRangeFilter({
 
     const fromKey = `${prefix}From`;
     const toKey = `${prefix}To`;
+    const presetKey = `${prefix}Preset`;
 
     const selected = React.useMemo<DateRange>(() => {
         const fromMs = parseMs(searchParams.get(fromKey));
@@ -67,12 +68,13 @@ export function DashboardDateRangeFilter({
     }, [fromKey, toKey, searchParams]);
 
     const pushRange = React.useCallback(
-        (range: DateRange | undefined) => {
+        (range: DateRange | undefined, preset?: string) => {
             const next = new URLSearchParams(searchParams.toString());
 
             if (!range?.from && !range?.to) {
                 next.delete(fromKey);
                 next.delete(toKey);
+                next.delete(presetKey);
                 router.replace(`${pathname}?${next.toString()}`, { scroll: false });
                 return;
             }
@@ -83,9 +85,15 @@ export function DashboardDateRangeFilter({
             if (from) next.set(fromKey, String(from.getTime()));
             if (to) next.set(toKey, String(to.getTime()));
 
+            if (preset) {
+                next.set(presetKey, preset);
+            } else {
+                next.delete(presetKey);
+            }
+
             router.replace(`${pathname}?${next.toString()}`, { scroll: false });
         },
-        [fromKey, toKey, pathname, router, searchParams],
+        [fromKey, pathname, presetKey, router, searchParams, toKey],
     );
 
     const onReset = React.useCallback(
@@ -178,7 +186,7 @@ export function DashboardDateRangeFilter({
                         size="sm"
                         className="flex-1"
                         disabled={!shiftRange}
-                        onClick={() => shiftRange && pushRange(shiftRange)}
+                        onClick={() => shiftRange && pushRange(shiftRange, "shift")}
                     >
                         {shiftLabel ?? t("dashboardTranslations.currentShift")}
                     </Button>

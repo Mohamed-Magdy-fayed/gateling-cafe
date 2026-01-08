@@ -57,9 +57,15 @@ function clampToValidDate(date: Date) {
     return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
-function normalizeRange(range: { from: Date; to: Date }) {
-    const from = startOfDay(clampToValidDate(range.from));
-    const to = endOfDay(clampToValidDate(range.to));
+type RangeInput = { from: Date; to: Date; preserveTime?: boolean };
+
+function normalizeRange(range: RangeInput) {
+    const rawFrom = clampToValidDate(range.from);
+    const rawTo = clampToValidDate(range.to);
+
+    const from = range.preserveTime ? rawFrom : startOfDay(rawFrom);
+    const to = range.preserveTime ? rawTo : endOfDay(rawTo);
+
     return from.getTime() <= to.getTime() ? { from, to } : { from: to, to: from };
 }
 
@@ -160,12 +166,12 @@ export async function getDashboardSnapshot({
     includeOrders: boolean;
     includeReservations: boolean;
     ranges: {
-        revenueTrend: { from: Date; to: Date };
-        volumeTrend: { from: Date; to: Date };
-        topProducts: { from: Date; to: Date };
-        recentOrders: { from: Date; to: Date };
-        upcomingReservations: { from: Date; to: Date };
-        kpisRevenue: { from: Date; to: Date };
+        revenueTrend: RangeInput;
+        volumeTrend: RangeInput;
+        topProducts: RangeInput;
+        recentOrders: RangeInput;
+        upcomingReservations: RangeInput;
+        kpisRevenue: RangeInput;
     };
 }): Promise<DashboardSnapshot> {
     const now = new Date();

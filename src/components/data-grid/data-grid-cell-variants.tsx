@@ -658,9 +658,8 @@ export function UrlCell<TData>({
       const href = getUrlHref(value);
       if (!href) {
         event.preventDefault();
-        toast.error("Invalid URL", {
-          description:
-            "URL contains a dangerous protocol (javascript:, data:, vbscript:, or file:)",
+        toast.error(t("dataGrid.cells.url.invalidTitle"), {
+          description: t("dataGrid.cells.url.invalidDescription"),
         });
         return;
       }
@@ -668,7 +667,7 @@ export function UrlCell<TData>({
       // Stop propagation to prevent grid from interfering with link navigation
       event.stopPropagation();
     },
-    [isEditing, value],
+    [isEditing, t, value],
   );
 
   React.useEffect(() => {

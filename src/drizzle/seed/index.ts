@@ -95,7 +95,7 @@ export async function seed() {
 }
 
 export async function seedAdmin() {
-    await clearSeededData();
-    await seedAdminUser();
+    // await clearSeededData();
+    // await seedAdminUser();
     await seedPlaytimeOptions();
 }

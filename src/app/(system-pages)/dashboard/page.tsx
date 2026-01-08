@@ -7,6 +7,8 @@ type DashboardPageProps = {
     searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
+type RangeWithPreset = { from: Date; to: Date; preserveTime?: boolean };
+
 function firstParam(value: string | string[] | undefined) {
     return Array.isArray(value) ? value[0] : value;
 }
@@ -34,13 +36,15 @@ function getRangeFromSearchParams(
     searchParams: Awaited<DashboardPageProps["searchParams"]>,
     prefix: string,
     fallback: { from: Date; to: Date },
-) {
+): RangeWithPreset {
     const fromMs = parseMs(searchParams?.[`${prefix}From`]);
     const toMs = parseMs(searchParams?.[`${prefix}To`]);
+    const preset = firstParam(searchParams?.[`${prefix}Preset`]);
 
     return {
         from: fromMs ? new Date(fromMs) : fallback.from,
         to: toMs ? new Date(toMs) : fallback.to,
+        preserveTime: preset === "shift",
     };
 }
 
