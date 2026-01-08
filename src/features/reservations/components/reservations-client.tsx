@@ -13,7 +13,6 @@ import { ReservationsActionBar } from "@/features/reservations/components/reserv
 import { getReservationsColumns } from "@/features/reservations/components/reservations-columns";
 import { ReservationsForm } from "@/features/reservations/components/reservations-form";
 import { useReservationAnnouncements } from "@/features/reservations/hooks/use-reservation-announcements";
-import { useReservationStart } from "@/features/reservations/hooks/use-reservation-start";
 import { useDataTable } from "@/hooks/use-data-table";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Option } from "@/types/data-table";
@@ -40,7 +39,6 @@ export function ReservationsClient({
     });
 
     useReservationAnnouncements(reservations);
-    useReservationStart(reservations);
 
     return (
         <DataTable table={table}>

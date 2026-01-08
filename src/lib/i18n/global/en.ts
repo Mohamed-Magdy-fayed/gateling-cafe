@@ -59,6 +59,7 @@ export default {
     edit: "Edit",
     delete: "Delete",
     areYouSure: "Are you sure?",
+    deletionConfirmation: "This action cannot be undone.",
     cancel: "Cancel",
     close: "Close",
     back: "Back",

@@ -59,6 +59,7 @@ export default {
     edit: "تعديل",
     delete: "حذف",
     areYouSure: "هل أنت متأكد؟",
+    deletionConfirmation: "لا يمكن التراجع عن هذا الإجراء.",
     close: "إغلاق",
     cancel: "إلغاء",
     back: "رجوع",

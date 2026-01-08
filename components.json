@@ -18,5 +18,11 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "registries": {}
+  "registries": {
+    "@nuqs": "https://nuqs.dev/r/{name}.json",
+    "@diceui": "https://diceui.com/r/{name}.json",
+    "@formcn": "https://formcn.dev/r/{name}.json",
+    "@shadcndesign": "https://shadcndesign-free.vercel.app/r/{name}.json",
+    "@tweakcn": "https://tweakcn.com/r/themes/{name}.json"
+  }
 }

@@ -327,7 +327,7 @@ export async function createReservation(
                 endTime,
                 totalPrice: playtimeOption.price,
                 totalPaid: playtimeOption.price,
-                status: "reserved",
+                status: "started",
                 notes: reservationData.notes,
             })
             .returning()
