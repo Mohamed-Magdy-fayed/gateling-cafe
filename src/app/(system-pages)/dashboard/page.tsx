@@ -57,6 +57,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     const last30Days = { from: addDays(now, -29), to: now };
     const last7Days = { from: addDays(now, -6), to: now };
     const next24Hours = { from: now, to: addHours(now, 24) };
+    const allTime = { from: new Date(0), to: now };
 
     const ranges = {
         revenueTrend: getRangeFromSearchParams(searchParamsResolved, "rev", last30Days),
@@ -64,7 +65,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         topProducts: getRangeFromSearchParams(searchParamsResolved, "top", last30Days),
         recentOrders: getRangeFromSearchParams(searchParamsResolved, "ord", last7Days),
         upcomingReservations: getRangeFromSearchParams(searchParamsResolved, "res", next24Hours),
-        kpisRevenue: getRangeFromSearchParams(searchParamsResolved, "kpi", last7Days),
+        kpisRevenue: getRangeFromSearchParams(searchParamsResolved, "kpi", allTime),
     };
 
     const snapshot = await getDashboardSnapshot({

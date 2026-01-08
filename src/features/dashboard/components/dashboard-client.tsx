@@ -1,14 +1,7 @@
 "use client";
 
-import { DashboardHeader, DashboardKpis } from "@/features/dashboard/components/dashboard-kpis";
-import {
-    RecentOrdersCard,
-    RevenueTrendCard,
-    ShiftHistoryCard,
-    TopProductsCard,
-    UpcomingReservationsCard,
-    VolumeTrendCard,
-} from "@/features/dashboard/components/dashboard-sections";
+import { DashboardHeader, DashboardKpis, DayClosingCard } from "@/features/dashboard/components/dashboard-kpis";
+import { TopProductsCard } from "@/features/dashboard/components/dashboard-sections";
 import type { DashboardSnapshot } from "@/features/dashboard/get-dashboard-snapshot";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { cn } from "@/lib/utils";
@@ -26,60 +19,31 @@ export function DashboardClient({
 }) {
     const { t } = useTranslation();
 
-    const defaultRevenueTrend = {
-        from: new Date(snapshot.range.revenueTrend.from),
-        to: new Date(snapshot.range.revenueTrend.to),
+    const kpiRange = {
+        from: new Date(snapshot.range.kpisRevenue.from),
+        to: new Date(snapshot.range.kpisRevenue.to),
     };
-    const defaultVolumeTrend = {
-        from: new Date(snapshot.range.volumeTrend.from),
-        to: new Date(snapshot.range.volumeTrend.to),
-    };
-    const defaultTopProducts = {
-        from: new Date(snapshot.range.topProducts.from),
-        to: new Date(snapshot.range.topProducts.to),
-    };
-    const defaultRecentOrders = {
-        from: new Date(snapshot.range.recentOrders.from),
-        to: new Date(snapshot.range.recentOrders.to),
-    };
+
+    const shiftRange = snapshot.dayClosure
+        ? { from: new Date(snapshot.dayClosure.openedAt), to: new Date() }
+        : null;
 
     return (
         <div className="container mx-auto p-4 space-y-4">
             <DashboardHeader
-                canViewOrders={canViewOrders}
-                canViewReservations={canViewReservations}
+                defaultRange={kpiRange}
+                shiftRange={shiftRange}
             />
 
             <DashboardKpis
                 snapshot={snapshot}
                 canViewOrders={canViewOrders}
                 canViewReservations={canViewReservations}
-                canCloseDay={canCloseDay}
             />
 
             <div className="grid gap-4 lg:grid-cols-2">
-                <RevenueTrendCard snapshot={snapshot} defaultRange={defaultRevenueTrend} />
-                <VolumeTrendCard snapshot={snapshot} defaultRange={defaultVolumeTrend} />
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-                <TopProductsCard
-                    snapshot={snapshot}
-                    canViewOrders={canViewOrders}
-                    defaultRange={defaultTopProducts}
-                />
-                <ShiftHistoryCard history={snapshot.shiftHistory} />
-                {/* <div className="space-y-4">
-                    <RecentOrdersCard
-                        snapshot={snapshot}
-                        canViewOrders={canViewOrders}
-                        defaultRange={defaultRecentOrders}
-                    />
-                    <UpcomingReservationsCard
-                        snapshot={snapshot}
-                        canViewReservations={canViewReservations}
-                    />
-                </div> */}
+                <TopProductsCard snapshot={snapshot} canViewOrders={canViewOrders} />
+                <DayClosingCard snapshot={snapshot} canCloseDay={canCloseDay} />
             </div>
 
             {!canViewOrders && !canViewReservations ? (

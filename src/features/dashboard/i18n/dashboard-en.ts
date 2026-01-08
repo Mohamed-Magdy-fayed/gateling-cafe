@@ -3,7 +3,17 @@ import { dt, type LanguageMessages } from "@/lib/i18n/lib";
 export default {
     dashboardTranslations: {
         dashboard: "Dashboard",
+        totalIncome: "Total income",
+        rangeSelected: "{range}",
+        liveInsidePlayground: "Currently inside playground",
+        reservationsIncome: "Reservations income",
+        reservationsCount: "Reservations (count)",
+        ordersIncome: "Orders income",
+        ordersCount: "Orders (count)",
+        currentShift: "Current shift",
         last30Days: "Last 30 days",
+        allTime: "All time",
+        ordersAndReservations: "Orders + reservations",
         fromToDate: dt("From {from:date} to {to:date}", {
             date: {
                 from: {

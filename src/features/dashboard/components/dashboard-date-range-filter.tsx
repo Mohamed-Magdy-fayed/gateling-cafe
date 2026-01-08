@@ -33,10 +33,14 @@ export function DashboardDateRangeFilter({
     prefix,
     title,
     defaultRange,
+    shiftRange,
+    shiftLabel,
 }: {
     prefix: string;
     title: string;
     defaultRange: { from: Date; to: Date };
+    shiftRange?: { from: Date; to: Date };
+    shiftLabel?: string;
 }) {
     const { t } = useTranslation();
     const router = useRouter();
@@ -93,7 +97,13 @@ export function DashboardDateRangeFilter({
     );
 
     const label = React.useMemo(() => {
-        const dateText = formatRangeText(selected);
+        const isAllTimeDefault =
+            defaultRange.from.getTime() <= 24 * 60 * 60 * 1000 &&
+            (!hasExplicitValue || searchParams.get(`${prefix}From`) === "0");
+
+        const shouldShowRange = !isAllTimeDefault && hasExplicitValue;
+        const dateText = shouldShowRange ? formatRangeText(selected) : "";
+
         return (
             <span className="flex items-center gap-2">
                 <span>{title}</span>
@@ -108,7 +118,7 @@ export function DashboardDateRangeFilter({
                 ) : null}
             </span>
         );
-    }, [selected, title]);
+    }, [defaultRange.from, hasExplicitValue, prefix, searchParams, selected, t, title]);
 
     return (
         <Popover>
@@ -162,6 +172,15 @@ export function DashboardDateRangeFilter({
                         }}
                     >
                         {t("common.yesterday")}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        disabled={!shiftRange}
+                        onClick={() => shiftRange && pushRange(shiftRange)}
+                    >
+                        {shiftLabel ?? t("dashboardTranslations.currentShift")}
                     </Button>
                 </div>
             </PopoverContent>

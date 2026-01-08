@@ -223,15 +223,13 @@ export function VolumeTrendCard({
 export function TopProductsCard({
     snapshot,
     canViewOrders,
-    defaultRange,
 }: {
     snapshot: DashboardSnapshot;
     canViewOrders: boolean;
-    defaultRange: { from: Date; to: Date };
 }) {
     const { t } = useTranslation();
     const topProductsColumns = useMemo<
-        ColumnDef<DashboardSnapshot["topProductsLast30Days"][number]>[]
+        ColumnDef<DashboardSnapshot["topProducts"][number]>[]
     >(
         () => [
             {
@@ -273,7 +271,7 @@ export function TopProductsCard({
         [t],
     );
 
-    const topProductsData = snapshot.topProductsLast30Days;
+    const topProductsData = snapshot.topProducts;
     const { table: topProductsTable } = useDataTable({
         columns: topProductsColumns,
         data: topProductsData,
@@ -291,17 +289,7 @@ export function TopProductsCard({
         <Card>
             <CardHeader>
                 <CardTitle>{t("dashboardTranslations.topProducts")}</CardTitle>
-                <CardDescription>
-                    {t("dashboardTranslations.fromToDate", {
-                        from: defaultRange.from,
-                        to: defaultRange.to,
-                    })}
-                </CardDescription>
-                <DashboardDateRangeFilter
-                    prefix="top"
-                    title={t("common.selectDateRange")}
-                    defaultRange={defaultRange}
-                />
+                <CardDescription>{t("dashboardTranslations.allTime")}</CardDescription>
             </CardHeader>
             <CardContent>
                 {!canViewOrders ? (

@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -28,46 +27,66 @@ import { Label } from "@/components/ui/label";
 import { NumberInput } from "@/components/ui/number-input";
 import { Textarea } from "@/components/ui/textarea";
 import { closeDayAction, openDayAction } from "@/features/dashboard/actions";
+import { DashboardDateRangeFilter } from "@/features/dashboard/components/dashboard-date-range-filter";
 import type { DashboardSnapshot } from "@/features/dashboard/get-dashboard-snapshot";
 import { formatCurrency } from "@/lib/format";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
-function formatPct(pct: number) {
-    const rounded = Math.round(pct * 10) / 10;
-    const sign = rounded > 0 ? "+" : "";
-    return `${sign}${rounded}%`;
-}
-
-function KpiCard({
-    title,
-    value,
-    subtext,
-    trendPct,
-    className,
-}: {
+type KpiCardProps = {
     title: string;
     value: string;
     subtext?: string;
-    trendPct?: number | null;
-    className?: string;
-}) {
+};
+
+function KpiCard({ title, value, subtext }: KpiCardProps) {
     return (
-        <Card className={className}>
+        <Card>
             <CardHeader className="pb-2">
                 <CardDescription>{title}</CardDescription>
                 <CardTitle className="text-2xl">{value}</CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-muted-foreground">{subtext}</div>
-                    {typeof trendPct === "number" ? (
-                        <Badge
-                            variant={trendPct < 0 ? "destructive" : "secondary"}
-                            className="font-mono tabular-nums"
-                        >
-                            {formatPct(trendPct)}
-                        </Badge>
-                    ) : null}
+            {subtext ? (
+                <CardContent className="pt-0 text-xs text-muted-foreground">
+                    {subtext}
+                </CardContent>
+            ) : null}
+        </Card>
+    );
+}
+
+type DualStatCardProps = {
+    title: string;
+    primary: string;
+    secondaryLabel: string;
+    secondary: string;
+    disabled?: boolean;
+};
+
+function DualStatCard({
+    title,
+    primary,
+    secondaryLabel,
+    secondary,
+    disabled,
+}: DualStatCardProps) {
+    const { t } = useTranslation();
+
+    return (
+        <Card className={disabled ? "opacity-60" : undefined}>
+            <CardHeader className="pb-1">
+                <CardDescription>{title}</CardDescription>
+                <CardTitle className="text-2xl">
+                    {disabled ? t("dashboardTranslations.noAccess") : primary}
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-sm text-muted-foreground">
+                <div className="grid grid-cols-2 gap-2">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {secondaryLabel}
+                    </span>
+                    <span className="justify-self-end font-medium text-foreground">
+                        {disabled ? "--" : secondary}
+                    </span>
                 </div>
             </CardContent>
         </Card>
@@ -75,11 +94,11 @@ function KpiCard({
 }
 
 export function DashboardHeader({
-    canViewOrders,
-    canViewReservations,
+    defaultRange,
+    shiftRange,
 }: {
-    canViewOrders: boolean;
-    canViewReservations: boolean;
+    defaultRange: { from: Date; to: Date };
+    shiftRange?: { from: Date; to: Date } | null;
 }) {
     const { t } = useTranslation();
 
@@ -90,30 +109,18 @@ export function DashboardHeader({
                     {t("dashboardTranslations.dashboard")}
                 </h1>
             </div>
-            <div className="flex flex-wrap gap-2">
-                {canViewOrders ? (
-                    <Button asChild variant="outline" size="sm">
-                        <Link href="/orders">{t("dashboardTranslations.viewOrders")}</Link>
-                    </Button>
-                ) : null}
-                {canViewReservations ? (
-                    <Button asChild variant="outline" size="sm">
-                        <Link href="/reservations">
-                            {t("dashboardTranslations.viewReservations")}
-                        </Link>
-                    </Button>
-                ) : null}
-                <Button asChild size="sm">
-                    <Link href="/products">
-                        {t("dashboardTranslations.viewProducts")}
-                    </Link>
-                </Button>
-            </div>
+            <DashboardDateRangeFilter
+                prefix="kpi"
+                title={t("common.selectDateRange")}
+                defaultRange={defaultRange}
+                shiftRange={shiftRange ?? undefined}
+                shiftLabel={t("dashboardTranslations.currentShift")}
+            />
         </div>
     );
 }
 
-function DayClosingCard({
+export function DayClosingCard({
     snapshot,
     canCloseDay,
 }: {
@@ -125,18 +132,18 @@ function DayClosingCard({
     const [dialogOpen, setDialogOpen] = useState(false);
     const [isSubmitting, startTransition] = useTransition();
 
-    const defaultActual = snapshot.dayClosure?.actualCashCents
-        ?? snapshot.dayClosure?.expectedTotalCents
-        ?? null;
+    const defaultActual =
+        snapshot.dayClosure?.actualCashCents ??
+        snapshot.dayClosure?.expectedTotalCents ??
+        null;
     const [actualCash, setActualCash] = useState<number | null>(defaultActual);
     const [notes, setNotes] = useState(snapshot.dayClosure?.notes ?? "");
 
     const expectedTotal = snapshot.dayClosure?.expectedTotalCents ?? 0;
     const closure = snapshot.dayClosure;
 
-    const variance = closure && closure.differenceCents != null
-        ? closure.differenceCents
-        : 0;
+    const variance =
+        closure && closure.differenceCents != null ? closure.differenceCents : 0;
 
     const varianceLabel =
         variance < 0
@@ -212,7 +219,8 @@ function DayClosingCard({
                         })}
                     </div>
                     <div className={`text-sm font-medium ${varianceClass}`}>
-                        {t("dashboardTranslations.cashVariance")}: {closure
+                        {t("dashboardTranslations.cashVariance")}:{" "}
+                        {closure
                             ? `${formatCurrency(Math.abs(variance))} · ${varianceLabel}`
                             : "--"}
                     </div>
@@ -225,12 +233,16 @@ function DayClosingCard({
                         </div>
                         <div className="text-foreground">
                             {closure.closedAt
-                                ? t("dashboardTranslations.actualCashCollected") + ": " + formatCurrency(closure.actualCashCents ?? 0)
+                                ? t("dashboardTranslations.actualCashCollected") +
+                                ": " +
+                                formatCurrency(closure.actualCashCents ?? 0)
                                 : t("dashboardTranslations.dayOpenPendingClose")}
                         </div>
                         {closure.closedAt && (
                             <div>
-                                {t("dashboardTranslations.closedBy", { by: closure.closedBy ?? "" })}
+                                {t("dashboardTranslations.closedBy", {
+                                    by: closure.closedBy ?? "",
+                                })}
                             </div>
                         )}
                         {closure.notes ? (
@@ -246,9 +258,12 @@ function DayClosingCard({
                 )}
             </CardContent>
 
-            <CardFooter className="flex items-center justify-end gap-2">
+            <CardFooter className="flex items-center justify-end gap-2 mt-auto">
                 {!closure && (
-                    <Button disabled={!canCloseDay || isSubmitting} onClick={handleOpenDay}>
+                    <Button
+                        disabled={!canCloseDay || isSubmitting}
+                        onClick={handleOpenDay}
+                    >
                         {t("dashboardTranslations.openDayButton")}
                     </Button>
                 )}
@@ -262,7 +277,9 @@ function DayClosingCard({
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>{t("dashboardTranslations.closeDayTitle")}</DialogTitle>
+                                <DialogTitle>
+                                    {t("dashboardTranslations.closeDayTitle")}
+                                </DialogTitle>
                                 <DialogDescription>
                                     {t("dashboardTranslations.closeDayDialogHint", {
                                         expected: formatCurrency(expectedTotal),
@@ -280,7 +297,9 @@ function DayClosingCard({
                                         min={0}
                                         value={actualCash}
                                         onChange={setActualCash}
-                                        placeholder={t("dashboardTranslations.actualCashPlaceholder")}
+                                        placeholder={t(
+                                            "dashboardTranslations.actualCashPlaceholder",
+                                        )}
                                     />
                                 </div>
 
@@ -292,7 +311,9 @@ function DayClosingCard({
                                         id="closure-notes"
                                         value={notes}
                                         onChange={(e) => setNotes(e.target.value)}
-                                        placeholder={t("dashboardTranslations.closeDayNotePlaceholder")}
+                                        placeholder={t(
+                                            "dashboardTranslations.closeDayNotePlaceholder",
+                                        )}
                                     />
                                 </div>
                             </div>
@@ -322,179 +343,97 @@ function DayClosingCard({
     );
 }
 
-function ShiftHistoryCard({ history }: { history: DashboardSnapshot["shiftHistory"] }) {
-    const { t } = useTranslation();
-
-    const formatDateTime = (value: string) => {
-        try {
-            return new Intl.DateTimeFormat(undefined, {
-                dateStyle: "medium",
-                timeStyle: "short",
-            }).format(new Date(value));
-        } catch (_error) {
-            return value;
-        }
-    };
-
-    const getVarianceMeta = (difference: number | null) => {
-        if (difference == null || difference === 0) {
-            return {
-                label: t("dashboardTranslations.balanced"),
-                className: "text-muted-foreground",
-            };
-        }
-
-        if (difference < 0) {
-            return {
-                label: t("dashboardTranslations.shortfall"),
-                className: "text-destructive",
-            };
-        }
-
-        return {
-            label: t("dashboardTranslations.overage"),
-            className: "text-emerald-600",
-        };
-    };
-
-    return (
-        <Card className="border-primary/20 shadow-sm">
-            <CardHeader className="pb-3">
-                <CardTitle className="text-lg">
-                    {t("dashboardTranslations.shiftHistoryTitle")}
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-                {history.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">
-                        {t("dashboardTranslations.shiftHistoryEmpty")}
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {history.map((item) => {
-                            const varianceMeta = getVarianceMeta(item.differenceCents ?? 0);
-
-                            return (
-                                <div
-                                    key={item.id}
-                                    className="rounded-md border border-border/60 bg-muted/10 p-3"
-                                >
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <div className="text-sm font-medium text-foreground">
-                                            {formatDateTime(item.closedAt)}
-                                        </div>
-                                        <Badge variant="outline" className={varianceMeta.className}>
-                                            {varianceMeta.label}
-                                        </Badge>
-                                    </div>
-                                    <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                                        <div>
-                                            {t("dashboardTranslations.shiftHistoryOpened", {
-                                                when: formatDateTime(item.openedAt),
-                                                by: item.openedBy,
-                                            })}
-                                        </div>
-                                        <div>
-                                            {t("dashboardTranslations.shiftHistoryClosed", {
-                                                when: formatDateTime(item.closedAt),
-                                                by: item.closedBy ?? t("dashboardTranslations.none"),
-                                            })}
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                                        <div>
-                                            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                                                {t("dashboardTranslations.shiftHistoryExpected")}
-                                            </div>
-                                            <div className="font-medium text-foreground">
-                                                {item.expectedTotalCents != null
-                                                    ? formatCurrency(item.expectedTotalCents)
-                                                    : "--"}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                                                {t("dashboardTranslations.shiftHistoryActual")}
-                                            </div>
-                                            <div className="font-medium text-foreground">
-                                                {item.actualCashCents != null
-                                                    ? formatCurrency(item.actualCashCents)
-                                                    : "--"}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                                                {t("dashboardTranslations.shiftHistoryVariance")}
-                                            </div>
-                                            <div className="font-medium text-foreground">
-                                                {item.differenceCents != null
-                                                    ? formatCurrency(Math.abs(item.differenceCents))
-                                                    : "--"}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {item.notes ? (
-                                        <div className="mt-3 text-xs text-muted-foreground">
-                                            {item.notes}
-                                        </div>
-                                    ) : null}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
-
 export function DashboardKpis({
     snapshot,
     canViewOrders,
     canViewReservations,
-    canCloseDay,
 }: {
     snapshot: DashboardSnapshot;
     canViewOrders: boolean;
     canViewReservations: boolean;
-    canCloseDay: boolean;
 }) {
     const { t } = useTranslation();
+
+    const rangeLabel = useMemo(() => {
+        const from = new Date(snapshot.range.kpisRevenue.from);
+        const to = new Date(snapshot.range.kpisRevenue.to);
+
+        const isAllTime = from.getTime() <= 24 * 60 * 60 * 1000;
+        if (isAllTime) return "";
+
+        try {
+            const formatter = new Intl.DateTimeFormat(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+            });
+            return `${formatter.format(from)} – ${formatter.format(to)}`;
+        } catch (_e) {
+            return `${from.toLocaleDateString()} – ${to.toLocaleDateString()}`;
+        }
+    }, [snapshot.range.kpisRevenue.from, snapshot.range.kpisRevenue.to]);
+
+    const cards = useMemo(
+        () => [
+            {
+                title: t("dashboardTranslations.totalIncome"),
+                value: formatCurrency(snapshot.kpis.totalRevenueInRange),
+                subtext: rangeLabel
+                    ? t("dashboardTranslations.rangeSelected", { range: rangeLabel })
+                    : t("dashboardTranslations.allTime"),
+            },
+            {
+                title: t("dashboardTranslations.activeKidsNow"),
+                value: snapshot.kpis.activeKidsNow.toLocaleString(),
+                subtext: t("dashboardTranslations.liveInsidePlayground"),
+            },
+        ],
+        [
+            rangeLabel,
+            snapshot.kpis.activeKidsNow,
+            snapshot.kpis.totalRevenueInRange,
+            t,
+        ],
+    );
+
+    const dualCards = useMemo(
+        () => [
+            {
+                title: t("dashboardTranslations.reservationsIncome"),
+                primary: formatCurrency(snapshot.kpis.reservationsRevenueInRange),
+                secondaryLabel: t("dashboardTranslations.reservationsCount"),
+                secondary: snapshot.kpis.reservationsCountInRange.toLocaleString(),
+                disabled: !canViewReservations,
+            },
+            {
+                title: t("dashboardTranslations.ordersIncome"),
+                primary: formatCurrency(snapshot.kpis.ordersRevenueInRange),
+                secondaryLabel: t("dashboardTranslations.ordersCount"),
+                secondary: snapshot.kpis.ordersCountInRange.toLocaleString(),
+                disabled: !canViewOrders,
+            },
+        ],
+        [
+            canViewOrders,
+            canViewReservations,
+            snapshot.kpis.ordersCountInRange,
+            snapshot.kpis.ordersRevenueInRange,
+            snapshot.kpis.reservationsCountInRange,
+            snapshot.kpis.reservationsRevenueInRange,
+            t,
+        ],
+    );
 
     return (
         <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <KpiCard
-                    title={t("dashboardTranslations.reservationsIncomeToday")}
-                    value={formatCurrency(snapshot.kpis.reservationsRevenueToday)}
-                    subtext={t("dashboardTranslations.playground")}
-                />
-                <KpiCard
-                    title={t("dashboardTranslations.ordersIncomeToday")}
-                    value={formatCurrency(snapshot.kpis.ordersRevenueToday)}
-                    subtext={t("dashboardTranslations.cafe")}
-                />
-                <KpiCard
-                    title={t("dashboardTranslations.ordersToday")}
-                    value={snapshot.kpis.ordersToday.toLocaleString()}
-                    subtext={
-                        canViewOrders
-                            ? t("dashboardTranslations.cafe")
-                            : t("dashboardTranslations.noAccess")
-                    }
-                />
-                <KpiCard
-                    title={t("dashboardTranslations.activeKidsNow")}
-                    value={snapshot.kpis.activeKidsNow.toLocaleString()}
-                    subtext={
-                        canViewReservations
-                            ? t("dashboardTranslations.playground")
-                            : t("dashboardTranslations.noAccess")
-                    }
-                />
+                {cards.map((card) => (
+                    <KpiCard key={card.title} {...card} />
+                ))}
+                {dualCards.map((card) => (
+                    <DualStatCard key={card.title} {...card} />
+                ))}
             </div>
-
-            <DayClosingCard snapshot={snapshot} canCloseDay={canCloseDay} />
         </div>
     );
 }

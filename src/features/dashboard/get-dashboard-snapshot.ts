@@ -2,17 +2,12 @@ import "server-only";
 
 import {
     and,
-    asc,
     between,
     count,
     desc,
     eq,
     gt,
-    gte,
-    inArray,
     isNull,
-    lte,
-    not,
     sql,
 } from "drizzle-orm";
 
@@ -83,15 +78,11 @@ export type DashboardSnapshot = {
         kpisRevenue: { from: string; to: string };
     };
     kpis: {
-        totalRevenueLast7Days: number;
-        totalRevenueLast7DaysTrendPct: number | null;
-        cafeRevenueLast7Days: number;
-        playgroundRevenueLast7Days: number;
-        unpaidBalanceOpen: number;
-        reservationsRevenueToday: number;
-        ordersRevenueToday: number;
-        ordersToday: number;
-        reservationsToday: number;
+        totalRevenueInRange: number;
+        reservationsRevenueInRange: number;
+        ordersRevenueInRange: number;
+        reservationsCountInRange: number;
+        ordersCountInRange: number;
         activeKidsNow: number;
     };
     dayClosure: {
@@ -135,7 +126,7 @@ export type DashboardSnapshot = {
         orders: number;
         reservations: number;
     }>;
-    topProductsLast30Days: Array<{
+    topProducts: Array<{
         productId: string;
         name: string;
         qty: number;
@@ -187,42 +178,11 @@ export async function getDashboardSnapshot({
     const kpisRevenueRange = normalizeRange(ranges.kpisRevenue);
 
     const kpiDays = Math.max(1, daysInclusive(kpisRevenueRange.from, kpisRevenueRange.to));
-    const prevKpisRevenueRange = {
-        from: startOfDay(addDays(kpisRevenueRange.from, -kpiDays)),
-        to: endOfDay(addDays(kpisRevenueRange.to, -kpiDays)),
-    };
 
-    const todayFrom = startOfDay(now);
-    const todayTo = endOfDay(now);
+    const seriesRevenue: DashboardSnapshot["seriesRevenueTrend"] = [];
+    const seriesVolume: DashboardSnapshot["seriesVolumeTrend"] = [];
 
-    const revenueDays = Math.max(1, daysInclusive(revenueTrendRange.from, revenueTrendRange.to));
-    const seriesRevenue = Array.from({ length: revenueDays }, (_, idx) => {
-        const d = addDays(revenueTrendRange.from, idx);
-        return {
-            day: dayKey(d),
-            cafeRevenue: 0,
-            playgroundRevenue: 0,
-            orders: 0,
-            reservations: 0,
-        };
-    });
-
-    const volumeDays = Math.max(1, daysInclusive(volumeTrendRange.from, volumeTrendRange.to));
-    const seriesVolume = Array.from({ length: volumeDays }, (_, idx) => {
-        const d = addDays(volumeTrendRange.from, idx);
-        return {
-            day: dayKey(d),
-            cafeRevenue: 0,
-            playgroundRevenue: 0,
-            orders: 0,
-            reservations: 0,
-        };
-    });
-
-    const seriesRevenueMap = new Map(seriesRevenue.map((r) => [r.day, r] as const));
-    const seriesVolumeMap = new Map(seriesVolume.map((r) => [r.day, r] as const));
-
-    const cafeRevenueLast7Days = includeOrders
+    const ordersRevenueInRange = includeOrders
         ? await db
             .select({
                 value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
@@ -239,28 +199,7 @@ export async function getDashboardSnapshot({
             .then((r) => r[0]?.value ?? 0)
         : 0;
 
-    const cafeRevenuePrev7Days = includeOrders
-        ? await db
-            .select({
-                value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("value"),
-            })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(
-                        OrdersTable.createdAt,
-                        prevKpisRevenueRange.from,
-                        prevKpisRevenueRange.to,
-                    ),
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const playgroundRevenueLast7Days = includeReservations
+    const reservationsRevenueInRange = includeReservations
         ? await db
             .select({
                 value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
@@ -281,118 +220,31 @@ export async function getDashboardSnapshot({
             .then((r) => r[0]?.value ?? 0)
         : 0;
 
-    const playgroundRevenuePrev7Days = includeReservations
+    const ordersCountInRange = includeOrders
         ? await db
-            .select({
-                value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("value"),
-            })
+            .select({ value: count().mapWith(Number).as("value") })
+            .from(OrdersTable)
+            .where(
+                and(
+                    isNull(OrdersTable.deletedAt),
+                    between(OrdersTable.createdAt, kpisRevenueRange.from, kpisRevenueRange.to),
+                ),
+            )
+            .then((r) => r[0]?.value ?? 0)
+        : 0;
+
+    const reservationsCountInRange = includeReservations
+        ? await db
+            .select({ value: count().mapWith(Number).as("value") })
             .from(ReservationsTable)
             .where(
                 and(
                     isNull(ReservationsTable.deletedAt),
                     between(
                         ReservationsTable.createdAt,
-                        prevKpisRevenueRange.from,
-                        prevKpisRevenueRange.to,
+                        kpisRevenueRange.from,
+                        kpisRevenueRange.to,
                     ),
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const unpaidCafe = includeOrders
-        ? await db
-            .select({
-                value: sql<number>`coalesce(sum(${OrdersTable.orderTotal} - ${OrdersTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("value"),
-            })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    inArray(OrdersTable.status, ["created", "preparing"]),
-                    sql`${OrdersTable.orderTotal} > ${OrdersTable.totalPaid}`,
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const unpaidPlayground = includeReservations
-        ? await db
-            .select({
-                value: sql<number>`coalesce(sum(${ReservationsTable.totalPrice} - ${ReservationsTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("value"),
-            })
-            .from(ReservationsTable)
-            .where(
-                and(
-                    isNull(ReservationsTable.deletedAt),
-                    inArray(ReservationsTable.status, ["reserved", "started"]),
-                    sql`${ReservationsTable.totalPrice} > coalesce(${ReservationsTable.totalPaid}, 0)`,
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const ordersToday = includeOrders
-        ? await db
-            .select({ value: count().mapWith(Number).as("value") })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(OrdersTable.createdAt, todayFrom, todayTo),
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const reservationsToday = includeReservations
-        ? await db
-            .select({ value: count().mapWith(Number).as("value") })
-            .from(ReservationsTable)
-            .where(
-                and(
-                    isNull(ReservationsTable.deletedAt),
-                    between(ReservationsTable.createdAt, todayFrom, todayTo),
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const ordersRevenueToday = includeOrders
-        ? await db
-            .select({
-                value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("value"),
-            })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(OrdersTable.createdAt, todayFrom, todayTo),
-                ),
-            )
-            .then((r) => r[0]?.value ?? 0)
-        : 0;
-
-    const reservationsRevenueToday = includeReservations
-        ? await db
-            .select({
-                value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("value"),
-            })
-            .from(ReservationsTable)
-            .where(
-                and(
-                    isNull(ReservationsTable.deletedAt),
-                    between(ReservationsTable.createdAt, todayFrom, todayTo),
                 ),
             )
             .then((r) => r[0]?.value ?? 0)
@@ -463,31 +315,6 @@ export async function getDashboardSnapshot({
         }
     }
 
-    const sevenDaysAgo = startOfDay(addDays(now, -6));
-
-    const shiftHistoryRows = await db
-        .select({
-            id: DailyCashClosuresTable.id,
-            openedAt: DailyCashClosuresTable.openedAt,
-            openedBy: DailyCashClosuresTable.openedBy,
-            closedAt: DailyCashClosuresTable.closedAt,
-            closedBy: DailyCashClosuresTable.closedBy,
-            expectedTotalCents: DailyCashClosuresTable.expectedTotalCents,
-            actualCashCents: DailyCashClosuresTable.actualCashCents,
-            differenceCents: DailyCashClosuresTable.differenceCents,
-            notes: DailyCashClosuresTable.notes,
-        })
-        .from(DailyCashClosuresTable)
-        .where(
-            and(
-                isNull(DailyCashClosuresTable.deletedAt),
-                not(isNull(DailyCashClosuresTable.closedAt)),
-                gte(DailyCashClosuresTable.closedAt, sevenDaysAgo),
-                lte(DailyCashClosuresTable.closedAt, now),
-            ),
-        )
-        .orderBy(desc(DailyCashClosuresTable.closedAt));
-
     const dayClosureRecord = activeShift
         ? {
             ...activeShift,
@@ -497,123 +324,9 @@ export async function getDashboardSnapshot({
         }
         : null;
 
-    if (includeOrders) {
-        const rows = await db
-            .select({
-                day: sql<Date>`date_trunc('day', ${OrdersTable.createdAt})`
-                    .mapWith((v) => new Date(v as unknown as string))
-                    .as("day"),
-                revenue: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("revenue"),
-                orders: count().mapWith(Number).as("orders"),
-            })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(OrdersTable.createdAt, revenueTrendRange.from, revenueTrendRange.to),
-                ),
-            )
-            .groupBy(sql`date_trunc('day', ${OrdersTable.createdAt})`)
-            .orderBy(asc(sql`date_trunc('day', ${OrdersTable.createdAt})`));
+    // Trend data omitted in simplified dashboard
 
-        for (const row of rows) {
-            const key = dayKey(row.day);
-            const existing = seriesRevenueMap.get(key);
-            if (!existing) continue;
-            existing.cafeRevenue = row.revenue;
-            existing.orders = row.orders;
-        }
-
-        const rowsVolume = await db
-            .select({
-                day: sql<Date>`date_trunc('day', ${OrdersTable.createdAt})`
-                    .mapWith((v) => new Date(v as unknown as string))
-                    .as("day"),
-                orders: count().mapWith(Number).as("orders"),
-            })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(OrdersTable.createdAt, volumeTrendRange.from, volumeTrendRange.to),
-                ),
-            )
-            .groupBy(sql`date_trunc('day', ${OrdersTable.createdAt})`)
-            .orderBy(asc(sql`date_trunc('day', ${OrdersTable.createdAt})`));
-
-        for (const row of rowsVolume) {
-            const key = dayKey(row.day);
-            const existing = seriesVolumeMap.get(key);
-            if (!existing) continue;
-            existing.orders = row.orders;
-        }
-    }
-
-    if (includeReservations) {
-        const rows = await db
-            .select({
-                day: sql<Date>`date_trunc('day', ${ReservationsTable.createdAt})`
-                    .mapWith((v) => new Date(v as unknown as string))
-                    .as("day"),
-                revenue: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
-                    .mapWith(Number)
-                    .as("revenue"),
-                reservations: count().mapWith(Number).as("reservations"),
-            })
-            .from(ReservationsTable)
-            .where(
-                and(
-                    isNull(ReservationsTable.deletedAt),
-                    between(
-                        ReservationsTable.createdAt,
-                        revenueTrendRange.from,
-                        revenueTrendRange.to,
-                    ),
-                ),
-            )
-            .groupBy(sql`date_trunc('day', ${ReservationsTable.createdAt})`)
-            .orderBy(asc(sql`date_trunc('day', ${ReservationsTable.createdAt})`));
-
-        for (const row of rows) {
-            const key = dayKey(row.day);
-            const existing = seriesRevenueMap.get(key);
-            if (!existing) continue;
-            existing.playgroundRevenue = row.revenue;
-            existing.reservations = row.reservations;
-        }
-
-        const rowsVolume = await db
-            .select({
-                day: sql<Date>`date_trunc('day', ${ReservationsTable.createdAt})`
-                    .mapWith((v) => new Date(v as unknown as string))
-                    .as("day"),
-                reservations: count().mapWith(Number).as("reservations"),
-            })
-            .from(ReservationsTable)
-            .where(
-                and(
-                    isNull(ReservationsTable.deletedAt),
-                    between(
-                        ReservationsTable.createdAt,
-                        volumeTrendRange.from,
-                        volumeTrendRange.to,
-                    ),
-                ),
-            )
-            .groupBy(sql`date_trunc('day', ${ReservationsTable.createdAt})`)
-            .orderBy(asc(sql`date_trunc('day', ${ReservationsTable.createdAt})`));
-
-        for (const row of rowsVolume) {
-            const key = dayKey(row.day);
-            const existing = seriesVolumeMap.get(key);
-            if (!existing) continue;
-            existing.reservations = row.reservations;
-        }
-    }
-
-    const topProductsLast30Days = includeOrders
+    const topProducts = includeOrders
         ? await db
             .select({
                 productId: ProductsTable.id,
@@ -631,88 +344,15 @@ export async function getDashboardSnapshot({
                 ProductsTable,
                 eq(OrdersProductsTable.productId, ProductsTable.id),
             )
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(
-                        OrdersTable.createdAt,
-                        topProductsRange.from,
-                        topProductsRange.to,
-                    ),
-                ),
-            )
+            .where(isNull(OrdersTable.deletedAt))
             .groupBy(ProductsTable.id, ProductsTable.name)
             .orderBy(desc(sql`coalesce(sum(${OrdersProductsTable.lineTotalCents}), 0)`))
             .limit(6)
         : [];
 
-    const recentOrders = includeOrders
-        ? await db
-            .select({
-                id: OrdersTable.id,
-                orderNumber: OrdersTable.orderNumber,
-                status: OrdersTable.status,
-                orderTotal: OrdersTable.orderTotal,
-                totalPaid: OrdersTable.totalPaid,
-                createdAt: OrdersTable.createdAt,
-            })
-            .from(OrdersTable)
-            .where(
-                and(
-                    isNull(OrdersTable.deletedAt),
-                    between(OrdersTable.createdAt, recentOrdersRange.from, recentOrdersRange.to),
-                ),
-            )
-            .orderBy(desc(OrdersTable.createdAt))
-            .limit(8)
-            .then((rows) =>
-                rows.map((r) => ({
-                    ...r,
-                    status: String(r.status),
-                    createdAt: new Date(r.createdAt).toISOString(),
-                })),
-            )
-        : [];
+    const recentOrders: DashboardSnapshot["recentOrders"] = [];
 
-    const upcomingReservations = includeReservations
-        ? await db
-            .select({
-                id: ReservationsTable.id,
-                reservationCode: ReservationsTable.reservationCode,
-                customerName: ReservationsTable.customerName,
-                status: ReservationsTable.status,
-                startTime: ReservationsTable.startTime,
-                endTime: ReservationsTable.endTime,
-                totalPrice: ReservationsTable.totalPrice,
-                totalPaid: ReservationsTable.totalPaid,
-            })
-            .from(ReservationsTable)
-            .where(
-                and(
-                    isNull(ReservationsTable.deletedAt),
-                    inArray(ReservationsTable.status, ["reserved", "started"]),
-                    between(
-                        ReservationsTable.startTime,
-                        upcomingReservationsRange.from,
-                        upcomingReservationsRange.to,
-                    ),
-                ),
-            )
-            .orderBy(asc(ReservationsTable.startTime), asc(ReservationsTable.endTime))
-            .limit(8)
-            .then((rows) =>
-                rows.map((r) => ({
-                    ...r,
-                    status: String(r.status),
-                    startTime: new Date(r.startTime).toISOString(),
-                    endTime: new Date(r.endTime).toISOString(),
-                    totalPaid: r.totalPaid ?? 0,
-                })),
-            )
-        : [];
-
-    const totalRevenueLast7Days = cafeRevenueLast7Days + playgroundRevenueLast7Days;
-    const totalRevenuePrev7Days = cafeRevenuePrev7Days + playgroundRevenuePrev7Days;
+    const upcomingReservations: DashboardSnapshot["upcomingReservations"] = [];
 
     return {
         range: {
@@ -742,18 +382,11 @@ export async function getDashboardSnapshot({
             },
         },
         kpis: {
-            totalRevenueLast7Days,
-            totalRevenueLast7DaysTrendPct: trendPercent(
-                totalRevenueLast7Days,
-                totalRevenuePrev7Days,
-            ),
-            cafeRevenueLast7Days,
-            playgroundRevenueLast7Days,
-            unpaidBalanceOpen: unpaidCafe + unpaidPlayground,
-            reservationsRevenueToday,
-            ordersRevenueToday,
-            ordersToday,
-            reservationsToday,
+            totalRevenueInRange: ordersRevenueInRange + reservationsRevenueInRange,
+            reservationsRevenueInRange,
+            ordersRevenueInRange,
+            reservationsCountInRange,
+            ordersCountInRange,
             activeKidsNow,
         },
         dayClosure: dayClosureRecord
@@ -774,22 +407,10 @@ export async function getDashboardSnapshot({
                 createdAt: dayClosureRecord.createdAt.toISOString(),
             }
             : null,
-        shiftHistory: shiftHistoryRows
-            .filter((row) => row.closedAt)
-            .map((row) => ({
-                id: row.id,
-                openedAt: row.openedAt.toISOString(),
-                openedBy: row.openedBy,
-                closedAt: row.closedAt!.toISOString(),
-                closedBy: row.closedBy ?? null,
-                expectedTotalCents: row.expectedTotalCents,
-                actualCashCents: row.actualCashCents,
-                differenceCents: row.differenceCents,
-                notes: row.notes ?? null,
-            })),
+        shiftHistory: [],
         seriesRevenueTrend: seriesRevenue,
         seriesVolumeTrend: seriesVolume,
-        topProductsLast30Days,
+        topProducts,
         recentOrders,
         upcomingReservations,
     };

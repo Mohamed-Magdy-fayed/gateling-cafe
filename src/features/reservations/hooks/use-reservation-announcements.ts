@@ -25,7 +25,6 @@ function useAudioUnlock() {
 
         // Try to resume an AudioContext (works on most browsers after a user gesture).
         try {
-            // @ts-expect-error - AudioContext is global in browsers
             const ctx = new AudioContext();
             if (ctx.state === "suspended") {
                 await ctx.resume();

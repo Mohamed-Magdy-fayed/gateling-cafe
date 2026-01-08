@@ -2,6 +2,7 @@ import { db } from "@/drizzle";
 import { ReservationsTable } from "@/drizzle/schema";
 import { PlaytimeOptionsTable } from "@/drizzle/schemas/kids/playtime-options-table";
 import { insertOrGetCustomer } from "@/features/helpers";
+import { seedPlaytimeOptions } from "./playtime";
 import {
     buildEgyptianPhone,
     pick,
@@ -14,12 +15,19 @@ export async function seedReservations({
     minPerDay = 10,
     maxPerDay = 30,
 } = {}) {
-    const playtimeOptions = await db
+    let playtimeOptions: Array<{
+        id: string;
+        durationMinutes: number;
+        price: number;
+    }> = await db
         .select()
         .from(PlaytimeOptionsTable)
         .then((r) => r);
 
-    if (playtimeOptions.length === 0) return [];
+    // Auto-seed playtime options if they are missing so reservations can always be generated.
+    if (playtimeOptions.length === 0) {
+        playtimeOptions = await seedPlaytimeOptions();
+    }
 
     const kidNamesAr = [
         "يوسف",

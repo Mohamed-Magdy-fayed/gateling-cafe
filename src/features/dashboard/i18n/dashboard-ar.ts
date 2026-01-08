@@ -3,7 +3,17 @@ import { dt, type LanguageMessages } from "@/lib/i18n/lib";
 export default {
     dashboardTranslations: {
         dashboard: "لوحة التحكم",
+        totalIncome: "إجمالي الدخل",
+        rangeSelected: "{range}",
+        liveInsidePlayground: "حاليًا داخل الملعب",
+        reservationsIncome: "إيراد الحجوزات",
+        reservationsCount: "عدد الحجوزات",
+        ordersIncome: "إيراد الطلبات",
+        ordersCount: "عدد الطلبات",
+        currentShift: "الشيفت الحالي",
         last30Days: "آخر ٣٠ يوم",
+        allTime: "منذ البداية",
+        ordersAndReservations: "الطلبات + الحجوزات",
         fromToDate: dt("من {from:date} إلى {to:date}", {
             date: {
                 from: {
