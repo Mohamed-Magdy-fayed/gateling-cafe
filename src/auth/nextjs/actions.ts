@@ -1,12 +1,14 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { z } from "zod";
+import { z } from "zod";
+import { getCurrentUser } from "@/auth/nextjs/get-current-user";
 import { db } from "@/drizzle";
 import { UsersTable } from "@/drizzle/schema";
-import { comparePasswords } from "../core/password-hasher";
+import { comparePasswords, hashPassword } from "../core/password-hasher";
 import { createSession, removeSession } from "../core/session";
 import { signInSchema } from "./schemas";
 
@@ -56,4 +58,41 @@ export async function logOut() {
   if (refererPath !== "/") {
     redirect("/");
   }
+}
+
+export async function changePassword(unsafeData: {
+  currentPassword: string;
+  newPassword: string;
+}) {
+  const { success, data } = z
+    .object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(1),
+    })
+    .safeParse(unsafeData);
+
+  if (!success) return "Bad request" as const;
+
+  const user = await getCurrentUser({ redirectIfNotFound: true });
+  const dbUser = await db.query.UsersTable.findFirst({
+    where: eq(UsersTable.id, user.id),
+  });
+  if (!dbUser || !dbUser.password || !dbUser.salt)
+    return "Bad request" as const;
+
+  const isCorrectPassword = await comparePasswords({
+    hashedPassword: dbUser.password,
+    password: data.currentPassword,
+    salt: dbUser.salt,
+  });
+
+  if (!isCorrectPassword) return "Credentials" as const;
+
+  const newHashedPassword = await hashPassword(data.newPassword, dbUser.salt);
+  await db
+    .update(UsersTable)
+    .set({ password: newHashedPassword })
+    .where(eq(UsersTable.id, user.id));
+
+  revalidatePath("/");
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOutIcon, MenuIcon, XIcon } from "lucide-react";
+import { LogOutIcon, MenuIcon, UserLockIcon, XIcon } from "lucide-react";
 import Image from "next/image";
 // import Image from "next/image";
 import Link from "next/link";
@@ -8,11 +8,17 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { logOut } from "@/auth/nextjs/actions";
 import { useAuth } from "@/auth/nextjs/components/auth-provider";
+import { ChangePasswordForm } from "@/auth/nextjs/components/change-password-form";
 import { DarkModeSwitcher } from "@/components/general/dark-mode-switcher";
 import { LanguageSwitcher } from "@/components/general/language-switcher";
 import { LoadingSpinner } from "@/components/general/loading-spinner";
 import { WrapWithTooltip } from "@/components/general/wrap-with-tooltip";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sheet,
   SheetClose,
@@ -193,6 +199,17 @@ export function Header() {
                         </Link>
                       </Button>
                     ))}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full">
+                          <UserLockIcon />
+                          {t("auth.changePassword")}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-min p-4" align="start">
+                        <ChangePasswordForm />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </SheetContent>
               </Sheet>
