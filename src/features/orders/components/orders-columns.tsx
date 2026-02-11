@@ -15,7 +15,7 @@ type Translations = {
     customerName: string;
     customerPhone: string;
     orderTotal: string;
-    totalPaid: string;
+    // totalPaid: string;
     status: string;
     createdAt: string;
 };
@@ -25,7 +25,7 @@ export const getOrdersColumns = ({
     customerName,
     customerPhone,
     orderTotal,
-    totalPaid,
+    // totalPaid,
     status,
     createdAt,
     statusCounts,
@@ -69,19 +69,19 @@ export const getOrdersColumns = ({
             },
             enableColumnFilter: true,
         },
-        {
-            accessorKey: "status",
-            header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={status} />
-            ),
-            cell: ({ row }) => getTranslation("ordersTranslations.statusNames", { statusName: row.original.status }),
-            meta: {
-                label: status,
-                variant: "multiSelect",
-                options: statusCounts,
-            },
-            enableColumnFilter: true,
-        },
+        // {
+        //     accessorKey: "status",
+        //     header: ({ column }) => (
+        //         <DataTableColumnHeader column={column} title={status} />
+        //     ),
+        //     cell: ({ row }) => getTranslation("ordersTranslations.statusNames", { statusName: row.original.status }),
+        //     meta: {
+        //         label: status,
+        //         variant: "multiSelect",
+        //         options: statusCounts,
+        //     },
+        //     enableColumnFilter: true,
+        // },
         {
             accessorKey: "orderTotal",
             header: ({ column }) => (
@@ -94,18 +94,18 @@ export const getOrdersColumns = ({
             },
             enableColumnFilter: true,
         },
-        {
-            accessorKey: "totalPaid",
-            header: ({ column }) => (
-                <DataTableColumnHeader column={column} title={totalPaid} />
-            ),
-            cell: ({ row }) => formatCurrency(row.original.totalPaid),
-            meta: {
-                label: totalPaid,
-                variant: "range",
-            },
-            enableColumnFilter: true,
-        },
+        // {
+        //     accessorKey: "totalPaid",
+        //     header: ({ column }) => (
+        //         <DataTableColumnHeader column={column} title={totalPaid} />
+        //     ),
+        //     cell: ({ row }) => formatCurrency(row.original.totalPaid),
+        //     meta: {
+        //         label: totalPaid,
+        //         variant: "range",
+        //     },
+        //     enableColumnFilter: true,
+        // },
         {
             accessorKey: "createdAt",
             header: ({ column }) => (

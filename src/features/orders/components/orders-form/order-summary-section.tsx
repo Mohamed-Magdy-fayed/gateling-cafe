@@ -13,17 +13,17 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { OrderFormValues } from "./schemas";
 
 interface OrderSummarySectionProps {
-    balanceDueCents: number;
+    // balanceDueCents: number;
     derivedOrderTotalCents: number;
-    form: UseFormReturn<OrderFormValues>;
-    totalPaidCents: number;
+    // form: UseFormReturn<OrderFormValues>;
+    // totalPaidCents: number;
 }
 
 export function OrderSummarySection({
-    balanceDueCents,
+    // balanceDueCents,
     derivedOrderTotalCents,
-    form,
-    totalPaidCents,
+    // form,
+    // totalPaidCents,
 }: OrderSummarySectionProps) {
     const { t } = useTranslation();
 
@@ -38,16 +38,16 @@ export function OrderSummarySection({
                         <span>{t("ordersTranslations.itemsSubtotal")}</span>
                         <span>{formatCurrency(derivedOrderTotalCents)}</span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
+                    {/* <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
                         <span>{t("ordersTranslations.amountPaid")}</span>
                         <span>{formatCurrency(totalPaidCents || 0)}</span>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between text-base font-semibold">
+                    </div> */}
+                    {/* <div className="mt-4 flex items-center justify-between text-base font-semibold">
                         <span>{t("ordersTranslations.balanceDue")}</span>
                         <span>{formatCurrency(balanceDueCents || 0)}</span>
-                    </div>
+                    </div> */}
                 </div>
-                <div className="flex-1">
+                {/* <div className="flex-1">
                     <FormField
                         control={form.control}
                         name="totalPaid"
@@ -72,7 +72,7 @@ export function OrderSummarySection({
                             </FormItem>
                         )}
                     />
-                </div>
+                </div> */}
             </div>
         </section>
     );

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookie } from "@/auth/core/session";
 import type { UserScreen } from "@/drizzle/schema";
 
-const PUBLIC_PATHS = ["/auth/sign-in", "/playground"];
+const PUBLIC_PATHS = ["/auth/sign-in", "/playground", "/qz-test"];
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;

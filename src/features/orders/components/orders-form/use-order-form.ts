@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
     type UseFieldArrayReturn,
     type UseFormReturn,
@@ -17,6 +17,7 @@ import {
     getOrderFormProducts,
     getOrderProducts,
 } from "@/features/orders/actions";
+import { formatReceiptPlain } from "@/features/orders/printing/receipt";
 import type { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ServerActionResponse } from "@/types/server-actions";
 import {
@@ -36,7 +37,7 @@ interface UseOrdersFormParams {
 type ItemsFieldArray = UseFieldArrayReturn<OrderFormValues, "items">;
 
 interface UseOrdersFormReturn {
-    balanceDueCents: number;
+    // balanceDueCents: number;
     derivedOrderTotalCents: number;
     fields: ItemsFieldArray["fields"];
     form: UseFormReturn<OrderFormValues>;
@@ -45,7 +46,7 @@ interface UseOrdersFormReturn {
     handleSubmit: (values: OrderFormValues) => Promise<void>;
     isSubmitting: boolean;
     products: Product[];
-    totalPaidCents: number;
+    // totalPaidCents: number;
     watchedItems: OrderFormValues["items"];
 }
 
@@ -64,7 +65,7 @@ export function useOrdersForm({
             orderNumber: order?.orderNumber ?? "",
             status: order?.status ?? "created",
             orderTotal: order?.orderTotal,
-            totalPaid: order?.totalPaid,
+            // totalPaid: order?.totalPaid,
             items: order ? [] : [createEmptyItem()],
         },
     });
@@ -75,6 +76,7 @@ export function useOrdersForm({
     });
 
     const orderId = order?.id;
+    const printTriggeredRef = useRef(false);
     const watchedItems = useWatch({ control: form.control, name: "items" }) ?? [];
 
     const productsById = useMemo(
@@ -82,8 +84,7 @@ export function useOrdersForm({
         [products],
     );
 
-    const watchedTotalPaid =
-        useWatch({ control: form.control, name: "totalPaid" });
+    // const watchedTotalPaid = useWatch({ control: form.control, name: "totalPaid" });
 
     const derivedOrderTotalCents = useMemo(
         () =>
@@ -111,14 +112,14 @@ export function useOrdersForm({
         [productsById, watchedItems],
     );
 
-    const totalPaidCents = useMemo(
-        () => Math.min(!watchedTotalPaid ? 0 : watchedTotalPaid, derivedOrderTotalCents),
-        [derivedOrderTotalCents, watchedTotalPaid],
-    );
-    const balanceDueCents = useMemo(
-        () => Math.max(derivedOrderTotalCents - totalPaidCents, 0),
-        [derivedOrderTotalCents, totalPaidCents],
-    );
+    // const totalPaidCents = useMemo(
+    //     () => Math.min(!watchedTotalPaid ? 0 : watchedTotalPaid, derivedOrderTotalCents),
+    //     [derivedOrderTotalCents, watchedTotalPaid],
+    // );
+    // const balanceDueCents = useMemo(
+    //     () => Math.max(derivedOrderTotalCents - totalPaidCents, 0),
+    //     [derivedOrderTotalCents, totalPaidCents],
+    // );
 
     const handleAddItem = () => {
         append(createEmptyItem());
@@ -144,16 +145,16 @@ export function useOrdersForm({
             0,
         );
 
-        const normalizedTotalPaid = Math.max(
-            0,
-            Math.min(values.totalPaid ?? 0, computedOrderTotal),
-        );
+        // const normalizedTotalPaid = Math.max(
+        //     0,
+        //     Math.min(values.totalPaid ?? 0, computedOrderTotal),
+        // );
 
         const payload: OrderFormValues = {
             ...values,
             items: normalizedItems,
             orderTotal: computedOrderTotal,
-            totalPaid: normalizedTotalPaid,
+            // totalPaid: normalizedTotalPaid,
         };
 
         let response: ServerActionResponse<Order | Order[]>;
@@ -167,6 +168,73 @@ export function useOrdersForm({
         if (response.error) {
             toast.error(t("error", { error: response.message ?? "" }));
             return;
+        }
+
+        // Fire-and-forget: attempt to print the receipt on the client using QZ Tray.
+        // Do not block or change UI flow on errors; only log failures.
+        if (!printTriggeredRef.current) {
+            printTriggeredRef.current = true;
+            (async () => {
+                try {
+                    const created = Array.isArray(response.data)
+                        ? response.data[0]
+                        : response.data;
+                    if (!created) return;
+
+                    const mod = await import("qz-tray");
+                    const qz = (mod as any).default ?? mod;
+
+                    try {
+                        await qz.websocket.connect();
+                    } catch (e) {
+                        // ignore connect errors (will try to print and fail if not connected)
+                    }
+
+                    // Try to list printers
+                    let printers: string[] = [];
+                    try {
+                        if (typeof qz.getPrinters === "function") {
+                            printers = await qz.getPrinters();
+                        } else if (qz.api && typeof qz.api.getPrinters === "function") {
+                            printers = await qz.api.getPrinters();
+                        }
+                    } catch (e) {
+                        // listing failed; proceed without logging to avoid noise
+                    }
+
+                    const virtualPattern =
+                        /OneNote|PDF|Fax|Microsoft Print to PDF|Send To OneNote/i;
+                    const nonVirtual = printers.find((p) => !virtualPattern.test(p));
+                    const printerName = nonVirtual ?? printers[0] ?? "OneNote (Desktop)";
+
+                    const receipt = formatReceiptPlain(created as any, t("appName"));
+
+                    const encoder = new TextEncoder();
+                    const bytes = encoder.encode(receipt);
+                    const hex = Array.from(bytes)
+                        .map((b) => b.toString(16).padStart(2, "0"))
+                        .join("");
+
+                    const payload = [{ type: "raw", format: "hex", data: hex }];
+
+                    let config: any = null;
+                    if (qz.configs && typeof qz.configs.create === "function") {
+                        config = qz.configs.create(printerName);
+                    } else {
+                        config = { printer: printerName };
+                    }
+
+                    if (typeof qz.print === "function") {
+                        await qz.print(config, payload);
+                    } else if (qz.api && typeof qz.api.print === "function") {
+                        await qz.api.print(config, payload);
+                    } else {
+                        console.error("Auto-print: no print API available on qz-tray module");
+                    }
+                } catch (error) {
+                    console.error("Auto-print failed:", error);
+                }
+            })();
         }
 
         toast.success(t("success"));
@@ -193,6 +261,11 @@ export function useOrdersForm({
             cancelled = true;
         };
     }, [form, order, startTransition]);
+
+    // Reset print guard when the order prop changes (new form instance)
+    useEffect(() => {
+        printTriggeredRef.current = false;
+    }, [order]);
 
     useEffect(() => {
         let cancelled = false;
@@ -255,7 +328,10 @@ export function useOrdersForm({
 
     useEffect(() => {
         let cancelled = false;
-        if (order) { cancelled = true; return; }
+        if (order) {
+            cancelled = true;
+            return;
+        }
 
         if (cancelled) return;
 
@@ -299,27 +375,27 @@ export function useOrdersForm({
             });
         }
 
-        const currentTotalPaid = form.getValues("totalPaid");
-        console.log(totalPaidCents);
+        // const currentTotalPaid = form.getValues("totalPaid");
+        // console.log(totalPaidCents);
 
-        if ((currentTotalPaid !== totalPaidCents) && totalPaidCents !== 0 && totalPaidCents != null) {
-            form.setValue("totalPaid", totalPaidCents, {
-                shouldDirty: true,
-                shouldValidate: true,
-            });
-        }
+        // if ((currentTotalPaid !== totalPaidCents) && totalPaidCents !== 0 && totalPaidCents != null) {
+        //     form.setValue("totalPaid", totalPaidCents, {
+        //         shouldDirty: true,
+        //         shouldValidate: true,
+        //     });
+        // }
     }, [
         derivedOrderTotalCents,
         form,
         productsById,
-        totalPaidCents,
+        // totalPaidCents,
         watchedItems,
     ]);
 
     const isSubmitting = isPending || form.formState.isSubmitting;
 
     return {
-        balanceDueCents,
+        // balanceDueCents,
         derivedOrderTotalCents,
         fields,
         form,
@@ -328,7 +404,7 @@ export function useOrdersForm({
         handleSubmit,
         isSubmitting,
         products,
-        totalPaidCents,
+        // totalPaidCents,
         watchedItems,
     };
 }

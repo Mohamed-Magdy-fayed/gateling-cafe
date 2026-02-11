@@ -31,7 +31,7 @@ export function OrdersForm({
     const { t } = useTranslation();
 
     const {
-        balanceDueCents,
+        // balanceDueCents,
         derivedOrderTotalCents,
         fields,
         form,
@@ -40,7 +40,7 @@ export function OrdersForm({
         handleSubmit,
         isSubmitting,
         products,
-        totalPaidCents,
+        // totalPaidCents,
         watchedItems,
     } = useOrdersForm({ order, setIsOpen, t });
 
@@ -65,7 +65,7 @@ export function OrdersForm({
                                 </FormItem>
                             )}
                         />
-                        <FormField
+                        {/* <FormField
                             control={form.control}
                             name="status"
                             render={({ field }) => (
@@ -89,7 +89,7 @@ export function OrdersForm({
                                     <FormMessage />
                                 </FormItem>
                             )}
-                        />
+                        /> */}
                     </div>
 
                     <OrderItemsSection
@@ -102,10 +102,10 @@ export function OrdersForm({
                     />
 
                     <OrderSummarySection
-                        balanceDueCents={balanceDueCents}
+                        // balanceDueCents={balanceDueCents}
                         derivedOrderTotalCents={derivedOrderTotalCents}
-                        form={form}
-                        totalPaidCents={totalPaidCents}
+                    // form={form}
+                    // totalPaidCents={totalPaidCents}
                     />
                 </div>
 

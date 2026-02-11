@@ -124,6 +124,18 @@ export function Header() {
               <div>
                 <LanguageSwitcher />
               </div>
+              <div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <UserLockIcon />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-min p-4" align="start">
+                    <ChangePasswordForm />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 ml-2">

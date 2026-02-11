@@ -33,7 +33,7 @@ export function OrdersClient({
             customerName: t("ordersTranslations.customerName"),
             customerPhone: t("ordersTranslations.customerPhone"),
             orderTotal: t("ordersTranslations.orderTotal"),
-            totalPaid: t("ordersTranslations.totalPaid"),
+            // totalPaid: t("ordersTranslations.totalPaid"),
             statusCounts,
             getTranslation: t,
         }),

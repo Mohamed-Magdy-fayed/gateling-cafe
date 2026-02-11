@@ -39,7 +39,7 @@ const orderFormSchema = z.object({
     orderNumber: z.string(),
     status: z.enum(orderStatuses),
     orderTotal: z.number(),
-    totalPaid: z.number(),
+    // totalPaid: z.number(),
     items: z.array(orderProductSchema).min(1),
 });
 type OrderFormValues = z.infer<typeof orderFormSchema>;
@@ -154,10 +154,10 @@ export async function createOrder(
             0,
         );
 
-        const safeTotalPaid = Math.max(
-            0,
-            Math.min(orderFields.totalPaid, computedOrderTotal),
-        );
+        // const safeTotalPaid = Math.max(
+        //     0,
+        //     Math.min(orderFields.totalPaid, computedOrderTotal),
+        // );
 
         const { customer } = await insertOrGetCustomer({
             createdBy: user.email,
@@ -172,7 +172,7 @@ export async function createOrder(
                 .values({
                     ...orderFields,
                     orderTotal: computedOrderTotal,
-                    totalPaid: safeTotalPaid,
+                    // totalPaid: safeTotalPaid,
                     createdBy: user.email,
                     customerId: customer.id,
                     employeeId: user.id,
@@ -307,25 +307,25 @@ export async function editOrders(
                     0,
                 );
 
-                const currentTotals = await tx
-                    .select({ totalPaid: OrdersTable.totalPaid })
-                    .from(OrdersTable)
-                    .where(eq(OrdersTable.id, orderId))
-                    .then((res) => res[0]);
+                // const currentTotals = await tx
+                //     .select({ totalPaid: OrdersTable.totalPaid })
+                //     .from(OrdersTable)
+                //     .where(eq(OrdersTable.id, orderId))
+                //     .then((res) => res[0]);
 
-                const requestedTotalPaid =
-                    orderData.totalPaid !== undefined
-                        ? orderData.totalPaid
-                        : (currentTotals?.totalPaid ?? 0);
+                // const requestedTotalPaid =
+                //     orderData.totalPaid !== undefined
+                //         ? orderData.totalPaid
+                //         : (currentTotals?.totalPaid ?? 0);
 
-                const safeTotalPaid = Math.max(
-                    0,
-                    Math.min(requestedTotalPaid, computedOrderTotal),
-                );
+                // const safeTotalPaid = Math.max(
+                //     0,
+                //     Math.min(requestedTotalPaid, computedOrderTotal),
+                // );
 
                 updatePayload.orderTotal = computedOrderTotal;
-                updatePayload.totalPaid = safeTotalPaid;
-            } else if (orderData.totalPaid !== undefined) {
+                // updatePayload.totalPaid = safeTotalPaid;
+            } /*else if (orderData.totalPaid !== undefined) {
                 if (ids.length === 1) {
                     const orderId = ids[0];
 
@@ -349,7 +349,7 @@ export async function editOrders(
                 } else {
                     updatePayload.totalPaid = Math.max(0, orderData.totalPaid);
                 }
-            }
+            }*/
 
             const result = await tx
                 .update(OrdersTable)
