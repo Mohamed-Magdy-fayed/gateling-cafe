@@ -102,7 +102,7 @@ export async function closeDayAction(
         const [ordersRevenue, reservationsRevenue] = await Promise.all([
             db
                 .select({
-                    value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
+                    value: sql<number>`coalesce(sum(${OrdersTable.orderTotal}), 0)`
                         .mapWith(Number)
                         .as("value"),
                 })
@@ -116,7 +116,7 @@ export async function closeDayAction(
                 .then((r) => r[0]?.value ?? 0),
             db
                 .select({
-                    value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
+                    value: sql<number>`coalesce(sum(${ReservationsTable.totalPrice}), 0)`
                         .mapWith(Number)
                         .as("value"),
                 })
