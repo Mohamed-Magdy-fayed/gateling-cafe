@@ -17,6 +17,7 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { SheetFooter } from "@/components/ui/sheet";
 import type { Reservation } from "@/drizzle/schema";
 import {
@@ -67,6 +68,7 @@ export function ReservationsForm({
                 reservationCode: "",
                 customerName: "",
                 customerPhone: "",
+                persons: 1,
                 playtimeOptionId: "",
                 notes: "",
             },
@@ -86,6 +88,7 @@ export function ReservationsForm({
                 reservationCode: data.reservationCode ?? "",
                 customerName: data.customerName,
                 customerPhone: data.customerPhone,
+                persons: data.persons,
                 playtimeOptionId: data.playtimeOptionId ?? "",
                 notes: data.notes,
             };
@@ -156,7 +159,9 @@ export function ReservationsForm({
                                 <Badge>
                                     {selectedPlaytime
                                         ? formatCurrency(selectedPlaytime.price)
-                                        : isPending ? t("common.loading") : t("reservationsTranslations.selectPlaytimeOption")}
+                                        : isPending
+                                            ? t("common.loading")
+                                            : t("reservationsTranslations.selectPlaytimeOption")}
                                 </Badge>
                             </FormControl>
                         </FormItem>
@@ -190,6 +195,22 @@ export function ReservationsForm({
                                 <FormControl>
                                     <Input
                                         placeholder={t("reservationsTranslations.customerPhone")}
+                                        {...field}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="persons"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("reservationsTranslations.persons")}</FormLabel>
+                                <FormControl>
+                                    <NumberInput
+                                        placeholder={t("reservationsTranslations.persons")}
                                         {...field}
                                     />
                                 </FormControl>

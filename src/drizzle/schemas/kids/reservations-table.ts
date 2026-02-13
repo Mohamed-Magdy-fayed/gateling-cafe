@@ -54,6 +54,7 @@ export const ReservationsTable = pgTable(
       onDelete: "set null",
     }),
 
+    persons: integer().notNull(),
     reservationCode: varchar({ length: 128 }).notNull().unique(),
     customerName: varchar({ length: 255 }).notNull(),
     customerPhone: varchar({ length: 32 }),

@@ -325,8 +325,9 @@ export async function createReservation(
                 playtimeOptionId: playtimeOption.id,
                 startTime,
                 endTime,
-                totalPrice: playtimeOption.price,
-                totalPaid: playtimeOption.price,
+                persons: reservationData.persons,
+                totalPrice: playtimeOption.price * reservationData.persons,
+                totalPaid: playtimeOption.price * reservationData.persons,
                 status: "started",
                 notes: reservationData.notes,
             })
@@ -383,7 +384,6 @@ export async function editReservations(
 }
 
 // --- Automation helpers (permission-safe for operators) ---
-
 export async function autoStartDueReservationsAction(): Promise<
     ServerActionResponse<number>
 > {

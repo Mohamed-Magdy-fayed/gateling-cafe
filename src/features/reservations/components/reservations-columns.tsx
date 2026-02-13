@@ -85,6 +85,21 @@ export const getReservationsColumns = ({
             enableColumnFilter: true,
         },
         {
+            accessorKey: "persons",
+            header: ({ column }) => (
+                <DataTableColumnHeader
+                    column={column}
+                    title={getTranslation("reservationsTranslations.persons")}
+                />
+            ),
+            cell: ({ row }) => row.original.persons,
+            meta: {
+                variant: "number",
+                label: getTranslation("reservationsTranslations.persons"),
+            },
+            enableColumnFilter: true,
+        },
+        {
             accessorKey: "totalPrice",
             header: ({ column }) => (
                 <DataTableColumnHeader

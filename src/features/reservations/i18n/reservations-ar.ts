@@ -2,6 +2,7 @@ import { dt, type LanguageMessages } from "@/lib/i18n/lib";
 
 export default {
     reservationsTranslations: {
+        persons: "عدد الأشخاص",
         customerName: "الاسم",
         customerPhone: "الهاتف",
         totalPrice: "السعر الكلي",

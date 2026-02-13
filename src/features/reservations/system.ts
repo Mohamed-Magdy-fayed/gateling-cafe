@@ -67,6 +67,7 @@ type CreateReservationSystemInput = {
     customerName: string;
     customerPhone: string;
     playtimeOptionId: string;
+    persons: number;
     totalPaid: number;
     notes?: string;
     status?: "reserved" | "started" | "ended" | "cancelled";
@@ -136,6 +137,7 @@ export async function createReservationSystem(
             playtimeOptionId: input.playtimeOptionId,
             startTime: input.startTime,
             endTime: input.endTime,
+            persons: input.persons,
             totalPrice: playtime.price,
             totalPaid: input.totalPaid,
             status: input.status ?? "reserved",

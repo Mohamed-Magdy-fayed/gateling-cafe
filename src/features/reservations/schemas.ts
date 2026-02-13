@@ -5,6 +5,7 @@ export const reservationCreateSchema = z.object({
     customerName: z.string(),
     customerPhone: z.string(),
     playtimeOptionId: z.string().min(1),
+    persons: z.number().min(1),
     notes: z.string().optional(),
 });
 export type ReservationCreateValues = z.infer<typeof reservationCreateSchema>;
@@ -21,6 +22,7 @@ export const reservationFormSchema = z.object({
     reservationCode: z.string().optional(),
     customerName: z.string(),
     customerPhone: z.string(),
+    persons: z.number(),
     playtimeOptionId: z.string().optional(),
     notes: z.string().optional(),
 });
