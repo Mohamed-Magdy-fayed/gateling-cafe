@@ -49,15 +49,30 @@ const ROLES = {
         reservations: unrestricted,
     },
     user: {
-        products: unrestricted,
-        orders: unrestricted,
+        products: {
+            view: true,
+            create: true,
+            delete: false,
+            update: false,
+        },
+        orders: {
+            create: true,
+            view: true,
+            update: false,
+            delete: false,
+        },
         users: {
             view: true,
             create: true,
             update: (user, data) => user.id === data.id,
             delete: false,
         },
-        reservations: unrestricted,
+        reservations: {
+            create: true,
+            view: true,
+            update: false,
+            delete: false,
+        },
     },
 } as const satisfies RolesWithPermissions;
 

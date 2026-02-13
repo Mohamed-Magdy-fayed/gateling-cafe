@@ -191,7 +191,7 @@ export async function getDashboardSnapshot({
     const ordersRevenueInRange = includeOrders
         ? await db
             .select({
-                value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
+                value: sql<number>`coalesce(sum(${OrdersTable.orderTotal}), 0)`
                     .mapWith(Number)
                     .as("value"),
             })
@@ -208,7 +208,7 @@ export async function getDashboardSnapshot({
     const reservationsRevenueInRange = includeReservations
         ? await db
             .select({
-                value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
+                value: sql<number>`coalesce(sum(${ReservationsTable.totalPrice}), 0)`
                     .mapWith(Number)
                     .as("value"),
             })
@@ -289,7 +289,7 @@ export async function getDashboardSnapshot({
         if (includeOrders) {
             shiftOrdersTotal = await db
                 .select({
-                    value: sql<number>`coalesce(sum(${OrdersTable.totalPaid}), 0)`
+                    value: sql<number>`coalesce(sum(${OrdersTable.orderTotal}), 0)`
                         .mapWith(Number)
                         .as("value"),
                 })
@@ -306,7 +306,7 @@ export async function getDashboardSnapshot({
         if (includeReservations) {
             shiftReservationsTotal = await db
                 .select({
-                    value: sql<number>`coalesce(sum(${ReservationsTable.totalPaid}), 0)`
+                    value: sql<number>`coalesce(sum(${ReservationsTable.totalPrice}), 0)`
                         .mapWith(Number)
                         .as("value"),
                 })
