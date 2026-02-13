@@ -9,6 +9,7 @@ import {
     gt,
     isNull,
     sql,
+    sum,
 } from "drizzle-orm";
 
 import { db } from "@/drizzle";
@@ -306,9 +307,7 @@ export async function getDashboardSnapshot({
         if (includeReservations) {
             shiftReservationsTotal = await db
                 .select({
-                    value: sql<number>`coalesce(sum(${ReservationsTable.totalPrice}), 0)`
-                        .mapWith(Number)
-                        .as("value"),
+                    value: sum(ReservationsTable.totalPrice).mapWith(Number),
                 })
                 .from(ReservationsTable)
                 .where(
