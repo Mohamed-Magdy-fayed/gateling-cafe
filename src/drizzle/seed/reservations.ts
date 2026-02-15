@@ -111,6 +111,7 @@ export async function seedReservations({
                     totalPaid,
                     notes: "Lavida Jungle Play",
                     status: status as any,
+                    persons: 1,
                     startTime,
                     endTime,
                     customerId: customer.id,
