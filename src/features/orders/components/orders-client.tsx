@@ -10,6 +10,7 @@ import type { Order } from "@/drizzle/schema";
 import { OrdersActionBar } from "@/features/orders/components/orders-action-bar";
 import { getOrdersColumns } from "@/features/orders/components/orders-columns";
 import { OrdersForm } from "@/features/orders/components/orders-form";
+import { usePrinter } from "@/features/orders/printing/printer-provider";
 import { useDataTable } from "@/hooks/use-data-table";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Option } from "@/types/data-table";

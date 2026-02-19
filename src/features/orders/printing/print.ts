@@ -1,15 +1,14 @@
-import type { RefObject } from "react";
+import qz from "qz-tray";
 import type { Order } from "@/drizzle/schema";
 import { formatReceiptPlain } from "@/features/orders/printing/receipt";
 
 interface PrintArgs {
-    qz: any;
     order: Order;
     printerName: string;
     appName: string;
 }
 
-export async function printWithQz({ qz, order, printerName, appName }: PrintArgs) {
+export async function printWithQz({ order, printerName, appName }: PrintArgs) {
     const receipt = formatReceiptPlain(order, appName);
     const payload = [
         {
@@ -19,28 +18,16 @@ export async function printWithQz({ qz, order, printerName, appName }: PrintArgs
         },
     ];
 
-    let config = null;
-    if (qz.configs && typeof qz.configs.create === "function") {
-        config = qz.configs.create(printerName);
-    } else {
-        config = { printer: printerName };
-    }
-
-    if (typeof qz.print === "function") {
+    try {
+        const printer = await qz.printers.find(printerName);
+        const config = qz.configs.create(printer);
         await qz.print(config, payload);
-    } else if (qz.api && typeof qz.api.print === "function") {
-        await qz.api.print(config, payload);
-    } else {
-        console.error("Auto-print: no print API available on qz-tray module");
+    } catch (error) {
+        console.log(error);
     }
 }
 
-export async function ensureQzSecurity(
-    qz: any,
-    initializedRef: RefObject<boolean>,
-) {
-    if (initializedRef.current) return;
-
+export async function ensureQzSecurity() {
     const cert = process.env.NEXT_PUBLIC_QZ_CERT;
     const privateKeyPem = process.env.NEXT_PUBLIC_QZ_PRIVATE_KEY;
 
@@ -82,8 +69,6 @@ export async function ensureQzSecurity(
             return arrayBufferToBase64(signature);
         });
     }
-
-    initializedRef.current = true;
 }
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {

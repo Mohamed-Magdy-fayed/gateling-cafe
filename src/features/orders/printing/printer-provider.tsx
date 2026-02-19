@@ -1,5 +1,6 @@
 "use client";
 
+import qz from "qz-tray";
 import {
     createContext,
     type ReactNode,
@@ -7,7 +8,6 @@ import {
     useContext,
     useEffect,
     useMemo,
-    useRef,
     useState,
 } from "react";
 import { toast } from "sonner";
@@ -22,7 +22,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Order } from "@/drizzle/schema";
-import { ensureQzSecurity, printWithQz } from "@/features/orders/printing/print";
+import {
+    ensureQzSecurity,
+    printWithQz,
+} from "@/features/orders/printing/print";
 
 const STORAGE_KEY = "qz.printerName";
 
@@ -36,7 +39,6 @@ interface PrinterContextValue {
     needsSetup: boolean;
     openConfig: () => void;
     closeConfig: () => void;
-    refreshPrinters: () => Promise<void>;
     selectPrinter: (printer: string) => Promise<void>;
     printReceipt: (order: Order, appName: string) => Promise<void>;
 }
@@ -57,15 +59,12 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     const [selectedPrinter, setSelectedPrinter] = useState<string | null>(null);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [direction, setDirection] = useState<"ltr" | "rtl">("ltr");
-    const qzRef = useRef<any | null>(null);
-    const qzSecurityInitializedRef = useRef(false);
-    const connectPromiseRef = useRef<Promise<any> | null>(null);
 
     const needsSetup = !selectedPrinter;
 
     useEffect(() => {
         if (typeof document !== "undefined") {
-            setDirection(document.documentElement.dir === "rtl" ? "rtl" : "ltr");
+            setDirection(document.dir === "rtl" ? "rtl" : "ltr");
         }
     }, []);
 
@@ -78,120 +77,13 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         return stored;
     }, []);
 
-    const loadQz = useCallback(async () => {
-        if (qzRef.current) return qzRef.current;
-        const mod = await import("qz-tray");
-        const qz = mod.default ?? mod;
-        qzRef.current = qz;
-        return qz;
+    const selectPrinter = useCallback(async (printer: string) => {
+        setSelectedPrinter(printer);
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(STORAGE_KEY, printer);
+        }
+        setIsConfigOpen(false);
     }, []);
-
-    const ensureSocket = useCallback(async () => {
-        if (connectPromiseRef.current) {
-            return connectPromiseRef.current;
-        }
-
-        const promise = (async () => {
-            setStatus((prev) => (prev === "ready" ? prev : "connecting"));
-            const qz = await loadQz();
-            await ensureQzSecurity(qz, qzSecurityInitializedRef);
-
-            try {
-                if (!qz?.websocket?.isActive?.()) {
-                    await qz.websocket.connect();
-                    // small wait for isActive to flip
-                    for (let i = 0; i < 5 && !qz.websocket.isActive?.(); i++) {
-                        await new Promise((r) => setTimeout(r, 150));
-                    }
-                }
-
-                if (!qz?.websocket?.isActive?.()) {
-                    throw new Error("QZ websocket inactive after connect");
-                }
-
-                setStatus("ready");
-            } catch (err) {
-                console.error("QZ connect failed", err);
-                setStatus("error");
-                throw err;
-            }
-
-            return qz;
-        })();
-
-        connectPromiseRef.current = promise;
-        promise.finally(() => {
-            connectPromiseRef.current = null;
-        });
-
-        return promise;
-    }, [loadQz]);
-
-    const refreshPrinters = useCallback(async () => {
-        try {
-            const qz = await ensureSocket();
-            const candidates: Array<() => Promise<string[] | undefined>> = [];
-
-            if (typeof qz.getPrinters === "function") {
-                candidates.push(() => qz.getPrinters());
-            }
-            if (qz.api && typeof qz.api.getPrinters === "function") {
-                candidates.push(() => qz.api.getPrinters());
-            }
-            if (qz.printers && typeof qz.printers.find === "function") {
-                candidates.push(() => qz.printers.find());
-            }
-            if (qz.printers && typeof qz.printers.list === "function") {
-                candidates.push(() => qz.printers.list());
-            }
-
-            let list: string[] = [];
-            for (const fn of candidates) {
-                try {
-                    const result = await fn();
-                    if (Array.isArray(result) && result.length) {
-                        list = result;
-                        break;
-                    }
-                } catch (err) {
-                    console.error("Failed to list printers via candidate", err);
-                }
-            }
-
-            if (!list.length) {
-                console.warn("QZ returned no printers. Ensure virtual/OS printers are available and QZ has permissions.");
-            }
-
-            setPrinters(list);
-            if (!selectedPrinter && list.length > 0) {
-                setIsConfigOpen(true);
-            }
-            if (selectedPrinter) {
-                setIsConfigOpen(false);
-            }
-        } catch (err) {
-            setStatus("error");
-            setIsConfigOpen(true);
-            toast.error(
-                direction === "rtl"
-                    ? "تعذر الاتصال بخدمة الطباعة"
-                    : "Unable to connect to printer service",
-            );
-            console.error(err);
-        }
-    }, [direction, ensureSocket, selectedPrinter]);
-
-    const selectPrinter = useCallback(
-        async (printer: string) => {
-            setSelectedPrinter(printer);
-            if (typeof window !== "undefined") {
-                window.localStorage.setItem(STORAGE_KEY, printer);
-            }
-            setIsConfigOpen(false);
-            await ensureSocket();
-        },
-        [ensureSocket],
-    );
 
     const printReceipt = useCallback(
         async (order: Order, appName: string) => {
@@ -207,8 +99,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             }
 
             try {
-                const qz = await ensureSocket();
-                await printWithQz({ qz, order, printerName: printer, appName });
+                await printWithQz({ order, printerName: printer, appName });
             } catch (err) {
                 setStatus("error");
                 setIsConfigOpen(true);
@@ -220,19 +111,35 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
                 );
             }
         },
-        [direction, ensureSocket, loadSavedPrinter, selectedPrinter],
+        [direction, loadSavedPrinter, selectedPrinter],
     );
 
     useEffect(() => {
         const stored = loadSavedPrinter();
         if (!stored) {
             setIsConfigOpen(true);
-            void refreshPrinters();
             return;
         }
+    }, [loadSavedPrinter]);
 
-        void ensureSocket();
-    }, [ensureSocket, loadSavedPrinter, refreshPrinters]);
+    useEffect(() => {
+        ensureQzSecurity()
+            .then(async () => {
+                try {
+                    qz.websocket.connect()
+                    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+                    const printers = await qz.printers.find();
+                    setPrinters(printers);
+
+                    setStatus("ready");
+                } catch (error) {
+                    console.error("QZ Tray initialization error:", error);
+                    setStatus("error");
+                }
+            })
+            .catch((e) => console.log(e));
+    }, []);
 
     const value = useMemo<PrinterContextValue>(
         () => ({
@@ -243,11 +150,18 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             needsSetup,
             openConfig: () => setIsConfigOpen(true),
             closeConfig: () => setIsConfigOpen(false),
-            refreshPrinters,
             selectPrinter,
             printReceipt,
         }),
-        [isConfigOpen, needsSetup, printReceipt, printers, refreshPrinters, selectPrinter, selectedPrinter, status],
+        [
+            isConfigOpen,
+            needsSetup,
+            printReceipt,
+            printers,
+            selectPrinter,
+            selectedPrinter,
+            status,
+        ],
     );
 
     return (
@@ -258,7 +172,6 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
                 onOpenChange={setIsConfigOpen}
                 printers={printers}
                 selectedPrinter={selectedPrinter}
-                onRefresh={refreshPrinters}
                 onSelect={selectPrinter}
                 status={status}
                 direction={direction}
@@ -273,7 +186,6 @@ interface PrinterDialogProps {
     printers: string[];
     selectedPrinter: string | null;
     onSelect: (printer: string) => Promise<void>;
-    onRefresh: () => Promise<void>;
     status: PrinterStatus;
     direction: "ltr" | "rtl";
 }
@@ -284,30 +196,33 @@ function PrinterConfigDialog({
     printers,
     selectedPrinter,
     onSelect,
-    onRefresh,
     status,
     direction,
 }: PrinterDialogProps) {
     const isLoading = status === "connecting" && printers.length === 0;
-    const labels = direction === "rtl"
-        ? {
-            title: "طابعة الإيصالات",
-            desc: "اختر طابعة لتفعيل الطباعة التلقائية للإيصالات.",
-            info: "لم نعثر على طابعة محفوظة. اختر واحدة وسيتم حفظها للاستخدام القادم.",
-            refresh: status === "connecting" ? "جاري التحقق من الطابعات..." : "تحديث القائمة",
-            current: "الحالية:",
-            loading: "جاري تحميل الطابعات...",
-            empty: "لا توجد طابعات. تأكد أن QZ Tray يعمل.",
-        }
-        : {
-            title: "Receipt printer",
-            desc: "Select a printer to enable automatic receipt printing.",
-            info: "We could not find a saved printer. Choose one below and we will remember it for next time.",
-            refresh: status === "connecting" ? "Checking printers..." : "Refresh",
-            current: "Current:",
-            loading: "Loading printers...",
-            empty: "No printers found. Ensure QZ Tray is running.",
-        };
+    const labels =
+        direction === "rtl"
+            ? {
+                title: "طابعة الإيصالات",
+                desc: "اختر طابعة لتفعيل الطباعة التلقائية للإيصالات.",
+                info: "لم نعثر على طابعة محفوظة. اختر واحدة وسيتم حفظها للاستخدام القادم.",
+                refresh:
+                    status === "connecting"
+                        ? "جاري التحقق من الطابعات..."
+                        : "تحديث القائمة",
+                current: "الحالية:",
+                loading: "جاري تحميل الطابعات...",
+                empty: "لا توجد طابعات. تأكد أن QZ Tray يعمل.",
+            }
+            : {
+                title: "Receipt printer",
+                desc: "Select a printer to enable automatic receipt printing.",
+                info: "We could not find a saved printer. Choose one below and we will remember it for next time.",
+                refresh: status === "connecting" ? "Checking printers..." : "Refresh",
+                current: "Current:",
+                loading: "Loading printers...",
+                empty: "No printers found. Ensure QZ Tray is running.",
+            };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -317,17 +232,12 @@ function PrinterConfigDialog({
                     <DialogDescription>{labels.desc}</DialogDescription>
                 </DialogHeader>
 
-                <div className={`flex flex-col gap-4 ${direction === "rtl" ? "text-right" : "text-left"}`}>
+                <div
+                    className={`flex flex-col gap-4 ${direction === "rtl" ? "text-right" : "text-left"}`}
+                >
                     <div className="text-sm text-muted-foreground">{labels.info}</div>
 
                     <div className="flex items-center gap-2">
-                        <Button
-                            size="sm"
-                            onClick={onRefresh}
-                            disabled={status === "connecting"}
-                        >
-                            {labels.refresh}
-                        </Button>
                         {selectedPrinter ? (
                             <span className="text-sm text-muted-foreground">
                                 {labels.current} <strong>{selectedPrinter}</strong>
@@ -339,9 +249,13 @@ function PrinterConfigDialog({
 
                     <ScrollArea className="max-h-64 rounded border p-3">
                         {isLoading ? (
-                            <div className="text-sm text-muted-foreground">{labels.loading}</div>
+                            <div className="text-sm text-muted-foreground">
+                                {labels.loading}
+                            </div>
                         ) : printers.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">{labels.empty}</div>
+                            <div className="text-sm text-muted-foreground">
+                                {labels.empty}
+                            </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
                                 {printers.map((printer) => (

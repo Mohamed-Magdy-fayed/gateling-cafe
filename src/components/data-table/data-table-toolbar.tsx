@@ -1,7 +1,7 @@
 "use client";
 
 import type { Column, Table } from "@tanstack/react-table";
-import { X } from "lucide-react";
+import { FilterIcon, X } from "lucide-react";
 import * as React from "react";
 
 import { DataTableDateFilter } from "@/components/data-table/data-table-date-filter";
@@ -10,6 +10,7 @@ import { DataTableSliderFilter } from "@/components/data-table/data-table-slider
 import { DataTableViewOptions } from "@/components/data-table/data-table-view-options";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchInput } from "@/components/ui/search-input";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { cn } from "@/lib/utils";
@@ -41,12 +42,39 @@ export function DataTableToolbar<TData>({
       role="toolbar"
       aria-orientation="horizontal"
       className={cn(
-        "flex w-full items-start justify-between gap-2 p-1",
+        "@container flex w-full items-start justify-between gap-2 p-1",
         className,
       )}
       {...props}
     >
-      <div className="flex flex-1 flex-wrap items-center gap-2">
+      <div className="md:hidden block">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="secondary" size="sm">
+              {t("dataTable.filters")}
+              <FilterIcon />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="flex flex-col gap-2 items-stretch w-full min-w-xs">
+            {columns.map((column) => (
+              <DataTableToolbarFilter key={column.id} column={column} />
+            ))}
+            {isFiltered && (
+              <Button
+                aria-label={t("dataTable.resetFilters")}
+                variant="outline"
+                size="sm"
+                className="border-dashed"
+                onClick={onReset}
+              >
+                <X />
+                {t("dataTable.reset")}
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
+      </div>
+      <div className="md:flex hidden flex-1 flex-wrap items-center gap-2">
         {columns.map((column) => (
           <DataTableToolbarFilter key={column.id} column={column} />
         ))}

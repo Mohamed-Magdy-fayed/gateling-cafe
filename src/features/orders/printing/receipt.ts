@@ -1,4 +1,5 @@
 import type { Order } from "@/drizzle/schema";
+import { formatCurrency } from "@/lib/format";
 
 // Minimal plain-text ESC/POS receipt formatter.
 // Uses only fields from the provided `Order` object.
@@ -10,7 +11,7 @@ export function formatReceiptPlain(order: Order, shopName: string): string {
     const date = order.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
 
     const totalCents = typeof order.orderTotal === "number" ? order.orderTotal : 0;
-    const total = (totalCents / 100).toFixed(2);
+    const total = formatCurrency(totalCents);
 
     const lines: string[] = [];
     lines.push(shopName);

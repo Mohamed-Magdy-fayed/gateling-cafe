@@ -197,6 +197,7 @@ export default {
     goToLastPage: "الانتقال إلى الصفحة الأخيرة",
     clearFilters: "مسح الفلاتر",
     resetFilters: "إعادة تعيين الفلاتر",
+    filters: "الفلاتر",
   },
   copyright: dt("© {year:date} {appName}. جميع الحقوق محفوظة.", {
     date: { year: { year: "numeric" } },

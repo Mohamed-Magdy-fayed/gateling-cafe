@@ -6,6 +6,7 @@ import { getSessionFromCookie } from "@/auth/core/session";
 import { AuthProvider } from "@/auth/nextjs/components/auth-provider";
 import { DirectionProvider } from "@/components/ui/direction-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { PrinterProvider } from "@/features/orders/printing/printer-provider";
 import { LOCALE_COOKIE_NAME } from "@/lib/i18n/lib";
 import { TranslationProvider } from "@/lib/i18n/useTranslation";
 
@@ -34,7 +35,7 @@ export async function Providers({ children }: ProvidersProps) {
             <DirectionProvider>
               <AuthProvider session={session}>
                 <Toaster />
-                {children}
+                <PrinterProvider>{children}</PrinterProvider>
               </AuthProvider>
             </DirectionProvider>
           </NuqsAdapter>

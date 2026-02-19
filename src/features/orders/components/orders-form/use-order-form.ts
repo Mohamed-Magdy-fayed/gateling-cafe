@@ -17,9 +17,8 @@ import {
     getOrderFormProducts,
     getOrderProducts,
 } from "@/features/orders/actions";
-import { formatReceiptPlain } from "@/features/orders/printing/receipt";
+import { usePrinter } from "@/features/orders/printing/printer-provider";
 import type { useTranslation } from "@/lib/i18n/useTranslation";
-import type { ServerActionResponse } from "@/types/server-actions";
 import {
     createEmptyItem,
     type OrderFormValues,
@@ -125,6 +124,8 @@ export function useOrdersForm({
         append(createEmptyItem());
     };
 
+    const { printReceipt } = usePrinter();
+
     const handleSubmit = async (values: OrderFormValues) => {
         const normalizedItems = values.items.map((item) => {
             const product = productsById.get(item.productId);
@@ -157,84 +158,21 @@ export function useOrdersForm({
             // totalPaid: normalizedTotalPaid,
         };
 
-        let response: ServerActionResponse<Order | Order[]>;
-
         if (order) {
-            response = await editOrders({ ids: [order.id], ...payload });
+            const response = await editOrders({ ids: [order.id], ...payload });
+
+            if (response.error) {
+                toast.error(t("error", { error: response.message ?? "" }));
+                return;
+            }
         } else {
-            response = await createOrder(payload);
-        }
+            const response = await createOrder(payload);
+            if (response.error) {
+                toast.error(t("error", { error: response.message ?? "" }));
+                return;
+            }
 
-        if (response.error) {
-            toast.error(t("error", { error: response.message ?? "" }));
-            return;
-        }
-
-        // Fire-and-forget: attempt to print the receipt on the client using QZ Tray.
-        // Do not block or change UI flow on errors; only log failures.
-        if (!printTriggeredRef.current) {
-            printTriggeredRef.current = true;
-            (async () => {
-                try {
-                    const created = Array.isArray(response.data)
-                        ? response.data[0]
-                        : response.data;
-                    if (!created) return;
-
-                    const mod = await import("qz-tray");
-                    const qz = (mod as any).default ?? mod;
-
-                    try {
-                        await qz.websocket.connect();
-                    } catch (e) {
-                        // ignore connect errors (will try to print and fail if not connected)
-                    }
-
-                    // Try to list printers
-                    let printers: string[] = [];
-                    try {
-                        if (typeof qz.getPrinters === "function") {
-                            printers = await qz.getPrinters();
-                        } else if (qz.api && typeof qz.api.getPrinters === "function") {
-                            printers = await qz.api.getPrinters();
-                        }
-                    } catch (e) {
-                        // listing failed; proceed without logging to avoid noise
-                    }
-
-                    const virtualPattern =
-                        /OneNote|PDF|Fax|Microsoft Print to PDF|Send To OneNote/i;
-                    const nonVirtual = printers.find((p) => !virtualPattern.test(p));
-                    const printerName = nonVirtual ?? printers[0] ?? "OneNote (Desktop)";
-
-                    const receipt = formatReceiptPlain(created as any, t("appName"));
-
-                    const encoder = new TextEncoder();
-                    const bytes = encoder.encode(receipt);
-                    const hex = Array.from(bytes)
-                        .map((b) => b.toString(16).padStart(2, "0"))
-                        .join("");
-
-                    const payload = [{ type: "raw", format: "hex", data: hex }];
-
-                    let config: any = null;
-                    if (qz.configs && typeof qz.configs.create === "function") {
-                        config = qz.configs.create(printerName);
-                    } else {
-                        config = { printer: printerName };
-                    }
-
-                    if (typeof qz.print === "function") {
-                        await qz.print(config, payload);
-                    } else if (qz.api && typeof qz.api.print === "function") {
-                        await qz.api.print(config, payload);
-                    } else {
-                        console.error("Auto-print: no print API available on qz-tray module");
-                    }
-                } catch (error) {
-                    console.error("Auto-print failed:", error);
-                }
-            })();
+            printReceipt(response.data, t("appName"))
         }
 
         toast.success(t("success"));

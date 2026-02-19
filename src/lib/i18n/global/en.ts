@@ -197,6 +197,7 @@ export default {
     goToLastPage: "Go to last page",
     clearFilters: "Clear filters",
     resetFilters: "Reset filters",
+    filters: "Filters",
   },
   copyright: dt("© {year:date} {appName}. all rights reserved.", {
     date: { year: { year: "numeric" } },
