@@ -26,8 +26,10 @@ import {
     ensureQzSecurity,
     printWithQz,
 } from "@/features/orders/printing/print";
+import { env } from "@/data/env/client";
 
 const STORAGE_KEY = "qz.printerName";
+const PRINTING_DISABLED = env.NEXT_PUBLIC_DISABLE_PRINTING === "false";
 
 type PrinterStatus = "idle" | "connecting" | "ready" | "error";
 
@@ -60,7 +62,13 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [direction, setDirection] = useState<"ltr" | "rtl">("ltr");
 
-    const needsSetup = !selectedPrinter;
+    const printingDisabled = PRINTING_DISABLED;
+    const disabledMessage =
+        direction === "rtl"
+            ? "تم تعطيل الطباعة في هذا النظام."
+            : "Printing is disabled for this environment.";
+
+    const needsSetup = !printingDisabled && !selectedPrinter;
 
     useEffect(() => {
         if (typeof document !== "undefined") {
@@ -87,6 +95,11 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
 
     const printReceipt = useCallback(
         async (order: Order, appName: string) => {
+            if (printingDisabled) {
+                toast.info(disabledMessage);
+                return;
+            }
+
             const printer = selectedPrinter ?? loadSavedPrinter();
             if (!printer) {
                 setIsConfigOpen(true);
@@ -111,18 +124,21 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
                 );
             }
         },
-        [direction, loadSavedPrinter, selectedPrinter],
+        [disabledMessage, direction, loadSavedPrinter, printingDisabled, selectedPrinter],
     );
 
     useEffect(() => {
+        if (printingDisabled) return;
+
         const stored = loadSavedPrinter();
         if (!stored) {
             setIsConfigOpen(true);
-            return;
         }
-    }, [loadSavedPrinter]);
+    }, [loadSavedPrinter, printingDisabled]);
 
     useEffect(() => {
+        if (printingDisabled) return;
+
         ensureQzSecurity()
             .then(async () => {
                 try {
@@ -139,7 +155,15 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
                 }
             })
             .catch((e) => console.log(e));
-    }, []);
+    }, [printingDisabled]);
+
+    const openConfig = useCallback(() => {
+        if (printingDisabled) {
+            toast.info(disabledMessage);
+            return;
+        }
+        setIsConfigOpen(true);
+    }, [disabledMessage, printingDisabled]);
 
     const value = useMemo<PrinterContextValue>(
         () => ({
@@ -148,7 +172,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             selectedPrinter,
             isConfigOpen,
             needsSetup,
-            openConfig: () => setIsConfigOpen(true),
+            openConfig,
             closeConfig: () => setIsConfigOpen(false),
             selectPrinter,
             printReceipt,
@@ -158,6 +182,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             needsSetup,
             printReceipt,
             printers,
+            openConfig,
             selectPrinter,
             selectedPrinter,
             status,
