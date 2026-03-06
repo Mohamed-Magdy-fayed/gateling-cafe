@@ -360,7 +360,7 @@ sealed class AnnouncementWorker : BackgroundService
     private static DuckingHandle DuckOtherAppSessions(MMDevice device, float duckVolumeScalar, ILogger logger)
     {
         // Duck other apps, but keep this announcer process at full volume.
-        var currentPid = Environment.ProcessId;
+        var currentPid = unchecked((uint)Environment.ProcessId);
         var ducked = new List<(AudioSessionControl session, float original)>();
 
         try
@@ -373,7 +373,7 @@ sealed class AnnouncementWorker : BackgroundService
                 try
                 {
                     // Skip sessions we can't attribute to a process, and skip ourselves.
-                    int pid;
+                    uint pid;
                     try
                     {
                         pid = session.GetProcessID;
