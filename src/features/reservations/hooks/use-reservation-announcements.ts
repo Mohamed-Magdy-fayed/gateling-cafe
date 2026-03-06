@@ -1,278 +1,128 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useRef } from "react";
 import type { Reservation } from "@/drizzle/schema";
 import {
-    endReservationIfTimedOutAction,
     getAnnouncementTTSAudio,
     getAnnouncementTTSKeys,
 } from "@/features/reservations/actions";
-import { useTranslation } from "@/lib/i18n/useTranslation";
 
-// Auto-end and optionally announce overdue reservations.
-const STALE_ANNOUNCEMENT_THRESHOLD_MS = 10 * 60_000;
+const DEFAULT_LOCAL_ANNOUNCER_URL = "http://127.0.0.1:17777";
 
 function toDate(value: Reservation["endTime"]): Date | null {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
-// Ask the browser for audio permission/unlock so playback works even when the tab refocuses later.
-function useAudioUnlock() {
-    const unlockedRef = useRef(false);
-    const [asked, setAsked] = useState(false);
-
-    const ensureUnlocked = useCallback(async () => {
-        if (typeof window === "undefined") return false;
-        if (unlockedRef.current) return true;
-
-        // Try to resume an AudioContext (works on most browsers after a user gesture).
-        try {
-            const ctx = new AudioContext();
-            if (ctx.state === "suspended") {
-                await ctx.resume();
-            }
-            unlockedRef.current = ctx.state === "running";
-            setAsked(true);
-            return unlockedRef.current;
-        } catch (error) {
-            console.warn("Audio unlock failed", error);
-            setAsked(true);
-            return false;
-        }
-    }, []);
-
-    // If not unlocked, prompt the user once via toast to click anywhere to allow audio.
-    useEffect(() => {
-        if (asked || unlockedRef.current) return;
-        const handler = () => {
-            void ensureUnlocked();
-            window.removeEventListener("pointerdown", handler);
-        };
-        window.addEventListener("pointerdown", handler, { once: true });
-        return () => window.removeEventListener("pointerdown", handler);
-    }, [asked, ensureUnlocked]);
-
-    return ensureUnlocked;
-}
-
-async function playAudio(url: string, ensureAudio: () => Promise<boolean>) {
-    const canPlay = await ensureAudio();
-    if (!canPlay) {
-        toast.warning("Allow audio playback to hear announcements.");
-    }
-
-    const audio = new Audio(url);
-    return new Promise<void>((resolve, reject) => {
-        const onEnded = () => resolve();
-        const onError = () =>
-            reject(new Error("Failed to play announcement audio"));
-
-        audio.addEventListener("ended", onEnded, { once: true });
-        audio.addEventListener("error", onError, { once: true });
-
-        audio.play().catch(reject);
+async function postJson(url: string, body: unknown) {
+    await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
     });
 }
 
-function base64ToBlobUrl(base64: string, contentType = "audio/mpeg") {
-    const payload = base64.includes(",")
-        ? base64.substring(base64.indexOf(",") + 1)
-        : base64;
-    const binary = atob(payload);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-    }
-
-    const blob = new Blob([bytes], { type: contentType });
-    return URL.createObjectURL(blob);
-}
-
-async function playBase64Audio(
-    base64: string,
-    ensureAudio: () => Promise<boolean>,
-    contentType = "audio/mpeg",
-) {
-    const url = base64ToBlobUrl(base64, contentType);
-    try {
-        await playAudio(url, ensureAudio);
-    } finally {
-        URL.revokeObjectURL(url);
-    }
-}
-
-async function tryPlayViaLocalAnnouncerTTS(input: {
-    clips: Array<{ key: string; base64?: string; contentType?: string }>;
-}) {
-    const announcerUrl =
-        process.env.NEXT_PUBLIC_LOCAL_ANNOUNCER_URL?.trim() ||
-        "http://127.0.0.1:17777";
-
-    try {
-        const response = await fetch(`${announcerUrl}/announce-tts`, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json",
-            },
-            body: JSON.stringify({
-                clips: input.clips,
-                duck: true,
-            }),
-        });
-
-        if (!response.ok) {
-            return false;
-        }
-
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 export function useReservationAnnouncements(reservations: Reservation[]) {
-    const { t } = useTranslation();
-    const ensureAudio = useAudioUnlock();
-
-    const processed = useRef<Set<string>>(new Set());
-    const reservationsRef = useRef(reservations);
-    useEffect(() => {
-        reservationsRef.current = reservations;
-    }, [reservations]);
-
-    const isRunningRef = useRef(false);
-
-    const processReservation = useCallback(
-        async (reservation: Reservation, mode: "announce" | "silent") => {
-            try {
-                const response = await endReservationIfTimedOutAction({
-                    id: reservation.id,
-                });
-                if (response.error) {
-                    if (response.message !== "Not timed out") {
-                        toast.error(response.message);
-                    }
-                    return;
-                }
-
-                const endedNow = response.data?.endedNow ?? false;
-
-                if (mode === "announce" && endedNow) {
-                    const name = reservation.customerName.trim();
-
-                    // 1) Try local-disk cached playback (no internet/TTS needed)
-                    const keys = await getAnnouncementTTSKeys(name);
-                    const playedFromDisk = await tryPlayViaLocalAnnouncerTTS({
-                        clips: [{ key: keys.enKey }, { key: keys.arKey }],
-                    });
-
-                    if (!playedFromDisk) {
-                        // 2) Cache miss: synthesize audio (no cloud storage) then send to local announcer
-                        const audio = await getAnnouncementTTSAudio(name);
-                        const playedLocally = await tryPlayViaLocalAnnouncerTTS({
-                            clips: [
-                                {
-                                    key: audio.en.key,
-                                    base64: audio.en.base64,
-                                    contentType: audio.en.contentType,
-                                },
-                                {
-                                    key: audio.ar.key,
-                                    base64: audio.ar.base64,
-                                    contentType: audio.ar.contentType,
-                                },
-                            ],
-                        });
-
-                        if (!playedLocally) {
-                            // 3) Fallback: in-browser playback
-                            await playBase64Audio(
-                                audio.en.base64,
-                                ensureAudio,
-                                audio.en.contentType,
-                            );
-                            await playBase64Audio(
-                                audio.ar.base64,
-                                ensureAudio,
-                                audio.ar.contentType,
-                            );
-                        }
-                    }
-
-                    toast.info(
-                        t("reservationsTranslations.childPickupToastTitle", {
-                            customerName: name,
-                        }),
-                        {
-                            description: t(
-                                "reservationsTranslations.childPickupToastDescription",
-                                {
-                                    customerName: name,
-                                    endTime: toDate(reservation.endTime),
-                                },
-                            ),
-                        },
-                    );
-                }
-
-                processed.current.add(reservation.id);
-                reservationsRef.current = reservationsRef.current.map((item) =>
-                    item.id === reservation.id ? { ...item, status: "ended" } : item,
-                );
-            } catch (error) {
-                toast.error((error as Error).message);
-            }
-        },
-        [ensureAudio, t],
-    );
+    const scheduledById = useRef(new Map<string, string>());
+    const cachedClipKeys = useRef(new Set<string>());
 
     useEffect(() => {
         if (typeof window === "undefined") return;
 
-        const run = () => {
-            if (isRunningRef.current) return;
-            const now = Date.now();
+        const announcerUrl =
+            process.env.NEXT_PUBLIC_LOCAL_ANNOUNCER_URL?.trim() ||
+            DEFAULT_LOCAL_ANNOUNCER_URL;
 
-            const target = reservationsRef.current.find((reservation) => {
-                if (processed.current.has(reservation.id)) return false;
-                if (
-                    reservation.status === "ended" ||
-                    reservation.status === "cancelled"
-                )
-                    return false;
+        let disposed = false;
 
-                const end = toDate(reservation.endTime);
-                if (!end) return false;
-                return end.getTime() <= now;
-            });
+        void (async () => {
+            const active = reservations
+                .map((reservation) => {
+                    const end = toDate(reservation.endTime);
+                    return { reservation, end };
+                })
+                .filter(({ reservation, end }) => {
+                    if (!end) return false;
+                    if (reservation.status === "ended") return false;
+                    if (reservation.status === "cancelled") return false;
+                    return true;
+                });
 
-            if (!target) return;
+            const activeIds = new Set(active.map(({ reservation }) => reservation.id));
 
-            isRunningRef.current = true;
+            // Cancel anything no longer active.
+            for (const id of Array.from(scheduledById.current.keys())) {
+                if (activeIds.has(id)) continue;
+                scheduledById.current.delete(id);
+                try {
+                    await postJson(`${announcerUrl}/cancel-reservation`, {
+                        reservationId: id,
+                    });
+                } catch {
+                    // local service might be offline
+                }
+            }
 
-            const mode = (() => {
-                const end = toDate(target.endTime);
-                if (!end) return "silent" as const;
-                const overdue = now - end.getTime();
-                return overdue > STALE_ANNOUNCEMENT_THRESHOLD_MS
-                    ? "silent"
-                    : "announce";
-            })();
+            for (const { reservation, end } of active) {
+                if (!end) continue;
+                const endIso = end.toISOString();
+                const prev = scheduledById.current.get(reservation.id);
+                if (prev === endIso) continue;
 
-            void processReservation(target, mode).finally(() => {
-                isRunningRef.current = false;
-            });
-        };
+                const customerName = reservation.customerName.trim();
 
-        run();
-        const interval = window.setInterval(run, 30_000);
-        window.addEventListener("focus", run);
+                try {
+                    const keys = await getAnnouncementTTSKeys(customerName);
+                    if (disposed) return;
+
+                    const needsCache =
+                        !cachedClipKeys.current.has(keys.enKey) ||
+                        !cachedClipKeys.current.has(keys.arKey);
+
+                    const clips: Array<{
+                        key: string;
+                        base64?: string;
+                        contentType?: string;
+                    }> = needsCache
+                            ? []
+                            : [{ key: keys.enKey }, { key: keys.arKey }];
+
+                    if (needsCache) {
+                        const audio = await getAnnouncementTTSAudio(customerName);
+                        if (disposed) return;
+                        cachedClipKeys.current.add(audio.en.key);
+                        cachedClipKeys.current.add(audio.ar.key);
+                        clips.push(
+                            {
+                                key: audio.en.key,
+                                base64: audio.en.base64,
+                                contentType: audio.en.contentType,
+                            },
+                            {
+                                key: audio.ar.key,
+                                base64: audio.ar.base64,
+                                contentType: audio.ar.contentType,
+                            },
+                        );
+                    }
+
+                    await postJson(`${announcerUrl}/schedule-reservation`, {
+                        reservationId: reservation.id,
+                        endTimeUtc: endIso,
+                        customerName,
+                        clips,
+                        duck: true,
+                    });
+
+                    scheduledById.current.set(reservation.id, endIso);
+                } catch {
+                    // local service might be offline
+                }
+            }
+        })();
 
         return () => {
-            window.clearInterval(interval);
-            window.removeEventListener("focus", run);
+            disposed = true;
         };
-    }, [processReservation]);
+    }, [reservations]);
 }

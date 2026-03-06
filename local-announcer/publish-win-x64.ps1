@@ -29,4 +29,9 @@ After installing, reopen your terminal and re-run:
   /p:SelfContained=true `
   /p:EnableCompressionInSingleFile=true
 
+$installer = Join-Path $PSScriptRoot 'install-announcer-service.ps1'
+if (Test-Path $installer) {
+  Copy-Item -Force $installer (Join-Path $outDir 'install-announcer-service.ps1')
+}
+
 Write-Host "Published to $outDir"

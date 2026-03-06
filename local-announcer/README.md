@@ -5,7 +5,7 @@ This is a tiny local server meant to run on the cafe PC (the machine connected t
 It solves two problems:
 
 1) The announcement audio is not tied to the browser tab focus (multiple tabs / background tabs).
-2) During a callout, it can temporarily **duck** the PC master volume so the announcement is more audible over music.
+2) During a callout, it can temporarily **duck other apps' audio** so the announcement is more audible over music.
 
 ## What it does
 
@@ -15,6 +15,8 @@ It solves two problems:
 - Accepts `POST /announce-tts` with `{ "clips": [{"key":"...","base64":"..."}], "duck": true }`.
    - If `sounds/<key>.mp3` already exists, you can omit `base64` and it will play from disk.
 - Accepts `POST /test-beep` to play a generated tone (no MP3 URL required).
+- Accepts `POST /schedule-reservation` to set a **local timer** on the cafe PC.
+- Accepts `POST /cancel-reservation` to cancel a scheduled timer.
 - Downloads each MP3 and plays them sequentially.
 - Optionally ducks other apps' volumes while playing, then restores them.
 
@@ -58,6 +60,53 @@ The repo includes a GitHub Actions workflow that builds this EXE on tag push:
 
 - `GATELING_ANNOUNCER_PORT` (default `17777`)
 - `GATELING_ANNOUNCER_DUCK_VOLUME` (0.0 - 1.0, default `0.20`) — target volume for other apps during playback
+- `GATELING_ANNOUNCER_END_URL` (example: `https://YOUR_DOMAIN/api/local-announcer/end-reservation`) — server callback URL
+- `GATELING_ANNOUNCER_END_TOKEN` (shared secret) — Bearer token used for the callback
+
+## Run as a Windows Service (recommended for cafe PCs)
+
+Running as a service prevents accidental shutdown (closing a terminal window).
+
+### One-file setup (recommended)
+
+The release/artifact includes a helper script next to the EXE:
+
+- `install-announcer-service.ps1`
+
+Run it once as Administrator (it will prompt for elevation if needed). It will:
+
+- Set machine env vars (only if missing)
+- Install + start the Windows Service
+- Configure auto-start on Windows boot
+
+From an **Administrator** PowerShell in the folder containing `Gateling.Announcer.exe`:
+
+- `powershell -ExecutionPolicy Bypass -File .\install-announcer-service.ps1`
+
+- Install + start:
+   - `./Gateling.Announcer.exe --install-service`
+
+- Uninstall:
+   - `./Gateling.Announcer.exe --uninstall-service`
+
+The service name defaults to `GatelingAnnouncer`. You can override it:
+
+- `./Gateling.Announcer.exe --install-service --service-name MyCafeAnnouncer`
+
+## Local timers (works even if the browser is closed)
+
+The web app can push reservation end times to the local announcer.
+The announcer persists them to `schedules.json` (next to the EXE), so timers survive restarts.
+
+When a timer fires:
+
+1) The announcer plays the cached audio locally (from `sounds/`)
+2) Then it makes a **single** server request (best effort) to mark the reservation ended + revalidate
+
+To enable the server callback:
+
+- Set `GATELING_ANNOUNCER_END_URL` and `GATELING_ANNOUNCER_END_TOKEN` on the cafe PC
+- Set `LOCAL_ANNOUNCER_END_TOKEN` on the Next.js server (must match)
 
 ## Web app integration
 
