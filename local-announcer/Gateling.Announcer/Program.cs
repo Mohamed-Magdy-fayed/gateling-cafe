@@ -15,15 +15,15 @@ const string DefaultServiceName = "GatelingAnnouncer";
 // Requires an elevated (Administrator) terminal.
 if (args.Contains("--install-service", StringComparer.OrdinalIgnoreCase))
 {
-    var serviceName = GetArgValue(args, "--service-name") ?? DefaultServiceName;
-    InstallWindowsService(serviceName);
+    var serviceName = WindowsServiceInstaller.GetArgValue(args, "--service-name") ?? DefaultServiceName;
+    WindowsServiceInstaller.InstallWindowsService(serviceName);
     return;
 }
 
 if (args.Contains("--uninstall-service", StringComparer.OrdinalIgnoreCase))
 {
-    var serviceName = GetArgValue(args, "--service-name") ?? DefaultServiceName;
-    UninstallWindowsService(serviceName);
+    var serviceName = WindowsServiceInstaller.GetArgValue(args, "--service-name") ?? DefaultServiceName;
+    WindowsServiceInstaller.UninstallWindowsService(serviceName);
     return;
 }
 
@@ -889,81 +889,84 @@ sealed class ReservationScheduler : BackgroundService
     }
 }
 
-static string? GetArgValue(string[] args, string key)
+static class WindowsServiceInstaller
 {
-    for (var i = 0; i < args.Length; i++)
+    public static string? GetArgValue(string[] args, string key)
     {
-        if (string.Equals(args[i], key, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+        for (var i = 0; i < args.Length; i++)
         {
-            return args[i + 1];
+            if (string.Equals(args[i], key, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                return args[i + 1];
+            }
+
+            if (args[i].StartsWith(key + "=", StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i].Substring(key.Length + 1);
+            }
         }
 
-        if (args[i].StartsWith(key + "=", StringComparison.OrdinalIgnoreCase))
+        return null;
+    }
+
+    public static void InstallWindowsService(string serviceName)
+    {
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exePath))
         {
-            return args[i].Substring(key.Length + 1);
+            Console.Error.WriteLine("Unable to determine exe path.");
+            Environment.Exit(1);
+            return;
         }
+
+        // sc.exe syntax requires spaces after '='.
+        var binPathArg = $"binPath= \"\\\"{exePath}\\\" --service\"";
+        RunSc($"create {serviceName} {binPathArg} start= auto DisplayName= \"Gateling Announcer\"");
+        RunSc($"description {serviceName} \"Gateling local announcer (callouts)\"");
+        RunSc($"start {serviceName}");
+        Console.WriteLine($"Installed and started Windows Service '{serviceName}'.");
     }
 
-    return null;
-}
-
-static void InstallWindowsService(string serviceName)
-{
-    var exePath = Environment.ProcessPath;
-    if (string.IsNullOrWhiteSpace(exePath))
+    public static void UninstallWindowsService(string serviceName)
     {
-        Console.Error.WriteLine("Unable to determine exe path.");
-        Environment.Exit(1);
-        return;
+        try
+        {
+            RunSc($"stop {serviceName}");
+        }
+        catch
+        {
+            // ignore
+        }
+
+        RunSc($"delete {serviceName}");
+        Console.WriteLine($"Uninstalled Windows Service '{serviceName}'.");
     }
 
-    // sc.exe syntax requires spaces after '='.
-    var binPathArg = $"binPath= \"\\\"{exePath}\\\" --service\"";
-    RunSc($"create {serviceName} {binPathArg} start= auto DisplayName= \"Gateling Announcer\"");
-    RunSc($"description {serviceName} \"Gateling local announcer (callouts)\"");
-    RunSc($"start {serviceName}");
-    Console.WriteLine($"Installed and started Windows Service '{serviceName}'.");
-}
-
-static void UninstallWindowsService(string serviceName)
-{
-    try
+    private static void RunSc(string arguments)
     {
-        RunSc($"stop {serviceName}");
-    }
-    catch
-    {
-        // ignore
-    }
+        var psi = new ProcessStartInfo
+        {
+            FileName = "sc.exe",
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = false,
+        };
 
-    RunSc($"delete {serviceName}");
-    Console.WriteLine($"Uninstalled Windows Service '{serviceName}'.");
-}
+        using var proc = Process.Start(psi);
+        if (proc is null)
+        {
+            throw new InvalidOperationException("Failed to start sc.exe");
+        }
 
-static void RunSc(string arguments)
-{
-    var psi = new ProcessStartInfo
-    {
-        FileName = "sc.exe",
-        Arguments = arguments,
-        UseShellExecute = false,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        CreateNoWindow = false,
-    };
+        var stdout = proc.StandardOutput.ReadToEnd();
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
 
-    using var proc = Process.Start(psi);
-    if (proc is null)
-    {
-        throw new InvalidOperationException("Failed to start sc.exe");
-    }
-
-    var stdout = proc.StandardOutput.ReadToEnd();
-    var stderr = proc.StandardError.ReadToEnd();
-    proc.WaitForExit();
-
-    if (proc.ExitCode != 0)
-    {
-        throw new InvalidOperationException($"sc.exe failed ({proc.ExitCode}). {stdout} {stderr}");
+        if (proc.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"sc.exe failed ({proc.ExitCode}). {stdout} {stderr}");
+        }
     }
 }
