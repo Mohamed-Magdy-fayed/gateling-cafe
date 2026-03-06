@@ -65,7 +65,7 @@ app.MapPost("/announce", async (AnnouncementPayload payload, Channel<Announcemen
     }
 
     var urls = payload.Urls
-        .Select(u => u?.Trim())
+        .Select(u => (u ?? string.Empty).Trim())
         .Where(u => !string.IsNullOrWhiteSpace(u))
         .ToList();
 
@@ -317,13 +317,13 @@ sealed class AnnouncementWorker : BackgroundService
 
     private sealed class DuckingHandle : IDisposable
     {
-        private readonly List<(SimpleAudioVolume volume, float original)> _volumes;
+        private readonly List<(AudioSessionControl session, float original)> _sessions;
         private readonly ILogger _logger;
         private bool _disposed;
 
-        public DuckingHandle(List<(SimpleAudioVolume volume, float original)> volumes, ILogger logger)
+        public DuckingHandle(List<(AudioSessionControl session, float original)> sessions, ILogger logger)
         {
-            _volumes = volumes;
+            _sessions = sessions;
             _logger = logger;
         }
 
@@ -332,15 +332,26 @@ sealed class AnnouncementWorker : BackgroundService
             if (_disposed) return;
             _disposed = true;
 
-            foreach (var (volume, original) in _volumes)
+            foreach (var (session, original) in _sessions)
             {
                 try
                 {
-                    volume.Volume = original;
+                    session.SimpleAudioVolume.Volume = original;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogDebug(ex, "Failed to restore session volume");
+                }
+                finally
+                {
+                    try
+                    {
+                        session.Dispose();
+                    }
+                    catch
+                    {
+                        // best-effort
+                    }
                 }
             }
         }
@@ -350,12 +361,11 @@ sealed class AnnouncementWorker : BackgroundService
     {
         // Duck other apps, but keep this announcer process at full volume.
         var currentPid = Environment.ProcessId;
-        var ducked = new List<(SimpleAudioVolume volume, float original)>();
+        var ducked = new List<(AudioSessionControl session, float original)>();
 
         try
         {
-            // Prefer AudioSessionManager2 when available.
-            var sessionManager = device.AudioSessionManager2;
+            var sessionManager = device.AudioSessionManager;
             var sessions = sessionManager.Sessions;
             for (var i = 0; i < sessions.Count; i++)
             {
@@ -363,23 +373,29 @@ sealed class AnnouncementWorker : BackgroundService
                 try
                 {
                     // Skip sessions we can't attribute to a process, and skip ourselves.
-                    var pid = session.GetProcessID;
+                    int pid;
+                    try
+                    {
+                        pid = session.GetProcessID;
+                    }
+                    catch
+                    {
+                        pid = 0;
+                    }
+
                     if (pid <= 0 || pid == currentPid)
                     {
+                        session.Dispose();
                         continue;
                     }
 
-                    var simple = session.SimpleAudioVolume;
-                    var original = simple.Volume;
-                    ducked.Add((simple, original));
-                    simple.Volume = duckVolumeScalar;
+                    var original = session.SimpleAudioVolume.Volume;
+                    ducked.Add((session, original));
+                    session.SimpleAudioVolume.Volume = duckVolumeScalar;
                 }
                 catch (Exception ex)
                 {
                     logger.LogDebug(ex, "Failed to duck an audio session");
-                }
-                finally
-                {
                     session.Dispose();
                 }
             }
