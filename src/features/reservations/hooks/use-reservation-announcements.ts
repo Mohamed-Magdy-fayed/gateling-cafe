@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Reservation } from "@/drizzle/schema";
-import { endReservationIfTimedOutAction, getTTSUrl } from "@/features/reservations/actions";
+import {
+    endReservationIfTimedOutAction,
+    getAnnouncementTTSAudio,
+    getAnnouncementTTSKeys,
+} from "@/features/reservations/actions";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 // Auto-end and optionally announce overdue reservations.
@@ -62,7 +66,8 @@ async function playAudio(url: string, ensureAudio: () => Promise<boolean>) {
     const audio = new Audio(url);
     return new Promise<void>((resolve, reject) => {
         const onEnded = () => resolve();
-        const onError = () => reject(new Error("Failed to play announcement audio"));
+        const onError = () =>
+            reject(new Error("Failed to play announcement audio"));
 
         audio.addEventListener("ended", onEnded, { once: true });
         audio.addEventListener("error", onError, { once: true });
@@ -71,19 +76,48 @@ async function playAudio(url: string, ensureAudio: () => Promise<boolean>) {
     });
 }
 
-async function tryPlayViaLocalAnnouncer(urls: string[]) {
+function base64ToBlobUrl(base64: string, contentType = "audio/mpeg") {
+    const payload = base64.includes(",")
+        ? base64.substring(base64.indexOf(",") + 1)
+        : base64;
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+
+    const blob = new Blob([bytes], { type: contentType });
+    return URL.createObjectURL(blob);
+}
+
+async function playBase64Audio(
+    base64: string,
+    ensureAudio: () => Promise<boolean>,
+    contentType = "audio/mpeg",
+) {
+    const url = base64ToBlobUrl(base64, contentType);
+    try {
+        await playAudio(url, ensureAudio);
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+async function tryPlayViaLocalAnnouncerTTS(input: {
+    clips: Array<{ key: string; base64?: string; contentType?: string }>;
+}) {
     const announcerUrl =
         process.env.NEXT_PUBLIC_LOCAL_ANNOUNCER_URL?.trim() ||
         "http://127.0.0.1:17777";
 
     try {
-        const response = await fetch(`${announcerUrl}/announce`, {
+        const response = await fetch(`${announcerUrl}/announce-tts`, {
             method: "POST",
             headers: {
                 "content-type": "application/json",
             },
             body: JSON.stringify({
-                urls,
+                clips: input.clips,
                 duck: true,
             }),
         });
@@ -113,7 +147,9 @@ export function useReservationAnnouncements(reservations: Reservation[]) {
     const processReservation = useCallback(
         async (reservation: Reservation, mode: "announce" | "silent") => {
             try {
-                const response = await endReservationIfTimedOutAction({ id: reservation.id });
+                const response = await endReservationIfTimedOutAction({
+                    id: reservation.id,
+                });
                 if (response.error) {
                     if (response.message !== "Not timed out") {
                         toast.error(response.message);
@@ -125,16 +161,50 @@ export function useReservationAnnouncements(reservations: Reservation[]) {
 
                 if (mode === "announce" && endedNow) {
                     const name = reservation.customerName.trim();
-                    const { enUrl, arUrl } = await getTTSUrl(name);
 
-                    const playedLocally = await tryPlayViaLocalAnnouncer([enUrl, arUrl]);
-                    if (!playedLocally) {
-                        await playAudio(enUrl, ensureAudio);
-                        await playAudio(arUrl, ensureAudio);
+                    // 1) Try local-disk cached playback (no internet/TTS needed)
+                    const keys = await getAnnouncementTTSKeys(name);
+                    const playedFromDisk = await tryPlayViaLocalAnnouncerTTS({
+                        clips: [{ key: keys.enKey }, { key: keys.arKey }],
+                    });
+
+                    if (!playedFromDisk) {
+                        // 2) Cache miss: synthesize audio (no cloud storage) then send to local announcer
+                        const audio = await getAnnouncementTTSAudio(name);
+                        const playedLocally = await tryPlayViaLocalAnnouncerTTS({
+                            clips: [
+                                {
+                                    key: audio.en.key,
+                                    base64: audio.en.base64,
+                                    contentType: audio.en.contentType,
+                                },
+                                {
+                                    key: audio.ar.key,
+                                    base64: audio.ar.base64,
+                                    contentType: audio.ar.contentType,
+                                },
+                            ],
+                        });
+
+                        if (!playedLocally) {
+                            // 3) Fallback: in-browser playback
+                            await playBase64Audio(
+                                audio.en.base64,
+                                ensureAudio,
+                                audio.en.contentType,
+                            );
+                            await playBase64Audio(
+                                audio.ar.base64,
+                                ensureAudio,
+                                audio.ar.contentType,
+                            );
+                        }
                     }
 
                     toast.info(
-                        t("reservationsTranslations.childPickupToastTitle", { customerName: name }),
+                        t("reservationsTranslations.childPickupToastTitle", {
+                            customerName: name,
+                        }),
                         {
                             description: t(
                                 "reservationsTranslations.childPickupToastDescription",
@@ -167,7 +237,11 @@ export function useReservationAnnouncements(reservations: Reservation[]) {
 
             const target = reservationsRef.current.find((reservation) => {
                 if (processed.current.has(reservation.id)) return false;
-                if (reservation.status === "ended" || reservation.status === "cancelled") return false;
+                if (
+                    reservation.status === "ended" ||
+                    reservation.status === "cancelled"
+                )
+                    return false;
 
                 const end = toDate(reservation.endTime);
                 if (!end) return false;
@@ -182,7 +256,9 @@ export function useReservationAnnouncements(reservations: Reservation[]) {
                 const end = toDate(target.endTime);
                 if (!end) return "silent" as const;
                 const overdue = now - end.getTime();
-                return overdue > STALE_ANNOUNCEMENT_THRESHOLD_MS ? "silent" : "announce";
+                return overdue > STALE_ANNOUNCEMENT_THRESHOLD_MS
+                    ? "silent"
+                    : "announce";
             })();
 
             void processReservation(target, mode).finally(() => {

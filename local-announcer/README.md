@@ -10,9 +10,21 @@ It solves two problems:
 ## What it does
 
 - Listens on `http://127.0.0.1:17777` (localhost only).
+- `GET /` returns a small JSON help response (so you won't see a browser 404).
 - Accepts `POST /announce` with `{ "urls": ["...mp3", "...mp3"], "duck": true }`.
+- Accepts `POST /announce-tts` with `{ "clips": [{"key":"...","base64":"..."}], "duck": true }`.
+   - If `sounds/<key>.mp3` already exists, you can omit `base64` and it will play from disk.
+- Accepts `POST /test-beep` to play a generated tone (no MP3 URL required).
 - Downloads each MP3 and plays them sequentially.
-- Optionally ducks the Windows master volume while playing, then restores it.
+- Optionally ducks other apps' volumes while playing, then restores them.
+
+## Local caching (offline-friendly)
+
+The announcer persists audio files to disk so future callouts can play even with a weak connection.
+
+- Cache folder: `sounds/` (next to the EXE)
+- `POST /announce-tts` saves `sounds/<key>.mp3`
+- `POST /announce` saves `sounds/url-<hash>.mp3` after the first download
 
 ## Onboarding (recommended)
 
@@ -45,7 +57,7 @@ The repo includes a GitHub Actions workflow that builds this EXE on tag push:
 ## Environment variables
 
 - `GATELING_ANNOUNCER_PORT` (default `17777`)
-- `GATELING_ANNOUNCER_DUCK_VOLUME` (0.0 - 1.0, default `0.20`)
+- `GATELING_ANNOUNCER_DUCK_VOLUME` (0.0 - 1.0, default `0.20`) — target volume for other apps during playback
 
 ## Web app integration
 

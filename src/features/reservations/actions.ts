@@ -1,6 +1,5 @@
 "use server";
 
-import { Buffer } from "node:buffer";
 import { createHash } from "crypto";
 import {
     and,
@@ -24,7 +23,6 @@ import {
     type PlaytimeOption,
     PlaytimeOptionsTable,
 } from "@/drizzle/schemas/kids/playtime-options-table";
-import { TTSCacheTable } from "@/drizzle/schemas/kids/tts-cache-table";
 import { TTSSettingsTable } from "@/drizzle/schemas/kids/tts-settings-table";
 import { getActiveShift } from "@/features/dashboard/get-active-shift";
 import { insertOrGetCustomer } from "@/features/helpers";
@@ -36,7 +34,6 @@ import {
 } from "@/features/reservations/schemas";
 import { generateReservationCode } from "@/features/reservations/utils";
 import { getT } from "@/lib/i18n/actions";
-import { getFileDownloadURL, uploadFile } from "@/services/firebase/actions";
 import type { ServerActionResponse } from "@/types/server-actions";
 
 const TTS_ANNOUNCEMENT_KEY = "reservations_child_pickup";
@@ -49,23 +46,13 @@ function applyNameTemplate(template: string, name: string) {
     return template.replaceAll("{name}", name).replaceAll("{customerName}", name);
 }
 
-async function getOrCreateTTSUrlForText({
+async function synthesizeTTSBase64ForText({
     text,
     description,
 }: {
     text: string;
     description: string;
 }) {
-    const cached = await db
-        .select()
-        .from(TTSCacheTable)
-        .where(eq(TTSCacheTable.text, text))
-        .limit(1);
-
-    if (cached.length > 0) {
-        return cached[0].url;
-    }
-
     const client = new HumeClient({ apiKey: env.HUME_API_KEY });
 
     const response = await client.tts.synthesizeJson({
@@ -90,30 +77,48 @@ async function getOrCreateTTSUrlForText({
     const base64Payload = rawAudio.includes(",")
         ? rawAudio.substring(rawAudio.indexOf(",") + 1)
         : rawAudio;
-    const audioBinary = Buffer.from(base64Payload, "base64");
 
-    const fileHash = createHash("sha256").update(text).digest("hex").slice(0, 16);
-    const storagePath = `tts/${fileHash}.mp3`;
-    let url: string;
-    try {
-        url = await uploadFile(storagePath, audioBinary);
-    } catch (error) {
-        if ((error as Error).message === "File already exists at this path.") {
-            url = await getFileDownloadURL(storagePath);
-        } else {
-            throw error;
-        }
-    }
+    const key = createHash("sha256").update(text).digest("hex").slice(0, 16);
 
-    await db
-        .insert(TTSCacheTable)
-        .values({
-            text,
-            url,
+    return {
+        key,
+        base64: base64Payload,
+        contentType: "audio/mpeg" as const,
+    };
+}
+
+async function getAnnouncementTexts(name: string) {
+    const trimmedName = name.trim();
+
+    const templates = await db
+        .select({
+            templateEn: TTSSettingsTable.templateEn,
+            templateAr: TTSSettingsTable.templateAr,
         })
-        .onConflictDoNothing();
+        .from(TTSSettingsTable)
+        .where(eq(TTSSettingsTable.key, TTS_ANNOUNCEMENT_KEY))
+        .limit(1)
+        .then((res) => res[0]);
 
-    return url;
+    const textEn = applyNameTemplate(
+        templates?.templateEn ?? DEFAULT_TTS_TEMPLATE_EN,
+        trimmedName,
+    );
+    const textAr = applyNameTemplate(
+        templates?.templateAr ?? DEFAULT_TTS_TEMPLATE_AR,
+        trimmedName,
+    );
+
+    return { textEn, textAr };
+}
+
+export async function getAnnouncementTTSKeys(name: string) {
+    const { textEn, textAr } = await getAnnouncementTexts(name);
+
+    return {
+        enKey: createHash("sha256").update(textEn).digest("hex").slice(0, 16),
+        arKey: createHash("sha256").update(textAr).digest("hex").slice(0, 16),
+    };
 }
 
 export async function getReservations(): Promise<
@@ -607,39 +612,23 @@ export async function updateAnnouncementTTSTemplates(input: {
     }
 }
 
-export async function getTTSUrl(name: string) {
-    const trimmedName = name.trim();
+export async function getAnnouncementTTSAudio(name: string) {
+    const { textEn, textAr } = await getAnnouncementTexts(name);
 
-    const templates = await db
-        .select({
-            templateEn: TTSSettingsTable.templateEn,
-            templateAr: TTSSettingsTable.templateAr,
-        })
-        .from(TTSSettingsTable)
-        .where(eq(TTSSettingsTable.key, TTS_ANNOUNCEMENT_KEY))
-        .limit(1)
-        .then((res) => res[0]);
-
-    const textEn = applyNameTemplate(
-        templates?.templateEn ?? DEFAULT_TTS_TEMPLATE_EN,
-        trimmedName,
-    );
-    const textAr = applyNameTemplate(
-        templates?.templateAr ?? DEFAULT_TTS_TEMPLATE_AR,
-        trimmedName,
-    );
-
-    const enUrl = await getOrCreateTTSUrlForText({
+    const en = await synthesizeTTSBase64ForText({
         text: textEn,
         description:
             "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in English.",
     });
 
-    const arUrl = await getOrCreateTTSUrlForText({
+    const ar = await synthesizeTTSBase64ForText({
         text: textAr,
         description:
             "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in Arabic Egyptian.",
     });
 
-    return { enUrl, arUrl };
+    return {
+        en,
+        ar,
+    };
 }
