@@ -16,6 +16,12 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Local Announcer (Callouts)
+
+If you want reservation callouts to reliably play over the cafe PC speakers (even with multiple browser tabs, and with music volume ducking during announcements), run the local announcer mini-server:
+
+- See [local-announcer/README.md](local-announcer/README.md)
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

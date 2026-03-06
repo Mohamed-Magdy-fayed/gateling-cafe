@@ -71,6 +71,33 @@ async function playAudio(url: string, ensureAudio: () => Promise<boolean>) {
     });
 }
 
+async function tryPlayViaLocalAnnouncer(urls: string[]) {
+    const announcerUrl =
+        process.env.NEXT_PUBLIC_LOCAL_ANNOUNCER_URL?.trim() ||
+        "http://127.0.0.1:17777";
+
+    try {
+        const response = await fetch(`${announcerUrl}/announce`, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({
+                urls,
+                duck: true,
+            }),
+        });
+
+        if (!response.ok) {
+            return false;
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export function useReservationAnnouncements(reservations: Reservation[]) {
     const { t } = useTranslation();
     const ensureAudio = useAudioUnlock();
@@ -94,11 +121,17 @@ export function useReservationAnnouncements(reservations: Reservation[]) {
                     return;
                 }
 
-                if (mode === "announce") {
+                const endedNow = response.data?.endedNow ?? false;
+
+                if (mode === "announce" && endedNow) {
                     const name = reservation.customerName.trim();
                     const { enUrl, arUrl } = await getTTSUrl(name);
-                    await playAudio(enUrl, ensureAudio);
-                    await playAudio(arUrl, ensureAudio);
+
+                    const playedLocally = await tryPlayViaLocalAnnouncer([enUrl, arUrl]);
+                    if (!playedLocally) {
+                        await playAudio(enUrl, ensureAudio);
+                        await playAudio(arUrl, ensureAudio);
+                    }
 
                     toast.info(
                         t("reservationsTranslations.childPickupToastTitle", { customerName: name }),

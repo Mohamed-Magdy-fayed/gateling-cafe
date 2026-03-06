@@ -423,7 +423,7 @@ export async function autoStartDueReservationsAction(): Promise<
 
 export async function endReservationIfTimedOutAction(input: {
     id: string;
-}): Promise<ServerActionResponse<true>> {
+}): Promise<ServerActionResponse<{ endedNow: boolean }>> {
     try {
         const user = await getCurrentUser({ redirectIfNotFound: true });
         if (!hasPermission(user, "reservations", "view")) {
@@ -453,7 +453,7 @@ export async function endReservationIfTimedOutAction(input: {
         }
 
         if (reservation.status === "ended" || reservation.status === "cancelled") {
-            return { error: false, data: true };
+            return { error: false, data: { endedNow: false } };
         }
 
         const endTime = new Date(reservation.endTime);
@@ -475,7 +475,7 @@ export async function endReservationIfTimedOutAction(input: {
             revalidatePath("/reservations");
         }
 
-        return { error: false, data: true };
+        return { error: false, data: { endedNow: ended.length > 0 } };
     } catch (error) {
         return { error: true, message: (error as Error).message };
     }
