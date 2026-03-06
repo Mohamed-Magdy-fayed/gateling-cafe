@@ -3,6 +3,8 @@ name: Local Announcer (win-x64)
 on:
   workflow_dispatch:
   push:
+    branches:
+      - stage
     tags:
       - "announcer-v*"
 
