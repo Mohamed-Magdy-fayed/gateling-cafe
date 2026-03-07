@@ -1,9 +1,11 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using NAudio.CoreAudioApi;
@@ -27,9 +29,12 @@ if (args.Contains("--uninstall-service", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+var isUserAgent = args.Contains("--user-agent", StringComparer.OrdinalIgnoreCase);
+var isServiceHost = !isUserAgent && (WindowsServiceHelpers.IsWindowsService() || args.Contains("--service", StringComparer.OrdinalIgnoreCase));
+
 var builder = WebApplication.CreateBuilder(args);
 
-if (WindowsServiceHelpers.IsWindowsService() || args.Contains("--service", StringComparer.OrdinalIgnoreCase))
+if (isServiceHost)
 {
     builder.Host.UseWindowsService();
 }
@@ -66,25 +71,88 @@ builder.Services.AddSingleton(_ =>
     }));
 
 builder.Services.AddHostedService<AnnouncementWorker>();
-builder.Services.AddSingleton<ReservationScheduler>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ReservationScheduler>());
+
+if (!isUserAgent)
+{
+    builder.Services.AddSingleton<ReservationScheduler>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ReservationScheduler>());
+}
 
 var app = builder.Build();
 
 app.UseCors();
 
 var port = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_PORT")?.Trim();
-var listenPort = 17777;
-if (!string.IsNullOrWhiteSpace(port) && int.TryParse(port, out var parsedPort))
+var listenPort = isUserAgent ? 17778 : 17777;
+
+var portArg = WindowsServiceInstaller.GetArgValue(args, "--port")?.Trim();
+if (!string.IsNullOrWhiteSpace(portArg) && int.TryParse(portArg, out var parsedPortArg))
 {
-    listenPort = parsedPort;
+    listenPort = parsedPortArg;
+}
+else
+{
+    var envName = isUserAgent ? "GATELING_ANNOUNCER_USER_AGENT_PORT" : "GATELING_ANNOUNCER_PORT";
+    port = Environment.GetEnvironmentVariable(envName)?.Trim();
+    if (!string.IsNullOrWhiteSpace(port) && int.TryParse(port, out var parsedPort))
+    {
+        listenPort = parsedPort;
+    }
 }
 
 app.Urls.Clear();
 app.Urls.Add($"http://127.0.0.1:{listenPort}");
 
-app.MapGet("/", () => Results.Ok(new { ok = true, endpoints = new[] { "/health", "/announce", "/announce-tts", "/test-beep" } }));
+app.MapGet("/", () => Results.Ok(new
+{
+    ok = true,
+    mode = isUserAgent ? "user-agent" : "service",
+    endpoints = isUserAgent
+        ? new[] { "/health", "/announce", "/announce-tts", "/test-beep", "/play-job" }
+        : new[] { "/health", "/announce", "/announce-tts", "/test-beep", "/schedule-reservation", "/cancel-reservation" }
+}));
 app.MapGet("/health", () => Results.Ok(new { ok = true }));
+
+app.MapGet("/debug", () => Results.Ok(new
+{
+    ok = true,
+    mode = isUserAgent ? "user-agent" : "service",
+    isWindowsService = WindowsServiceHelpers.IsWindowsService(),
+    processId = Environment.ProcessId,
+    sessionId = Process.GetCurrentProcess().SessionId,
+    helperUrlEnv = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_HELPER_URL")?.Trim(),
+    useHelperEnv = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_USE_HELPER")?.Trim(),
+    requireHelperEnv = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_REQUIRE_HELPER")?.Trim(),
+    computed = new
+    {
+        effectiveHelperUrl =
+            (Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_HELPER_URL")?.Trim() is { Length: > 0 } u)
+                ? u
+                : "http://127.0.0.1:17778",
+        useHelper = ComputeBoolDefaultServiceTrue("GATELING_ANNOUNCER_USE_HELPER"),
+        requireHelper = ComputeBoolDefaultServiceTrue("GATELING_ANNOUNCER_REQUIRE_HELPER")
+    }
+}));
+
+static bool ComputeBoolDefaultServiceTrue(string envVar)
+{
+    var isSvc = WindowsServiceHelpers.IsWindowsService();
+    var value = Environment.GetEnvironmentVariable(envVar)?.Trim();
+    if (string.IsNullOrWhiteSpace(value)) return isSvc;
+
+    return value.Equals("1", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+}
+
+if (isUserAgent)
+{
+    app.MapPost("/play-job", async (AnnouncementJob job, Channel<AnnouncementJob> channel, HttpContext httpContext) =>
+    {
+        await channel.Writer.WriteAsync(job, httpContext.RequestAborted);
+        return Results.Accepted(value: new { queued = true, type = "job" });
+    });
+}
 
 app.MapPost("/announce", async (AnnouncementPayload payload, Channel<AnnouncementJob> channel) =>
 {
@@ -187,11 +255,13 @@ app.MapPost("/announce-tts", async (
     return Results.Accepted(value: new { queued = true, count = localFiles.Count });
 });
 
-app.MapPost("/schedule-reservation", async (
-    ScheduleReservationPayload payload,
-    ReservationScheduler scheduler,
-    HttpContext httpContext) =>
+if (!isUserAgent)
 {
+    app.MapPost("/schedule-reservation", async (
+        ScheduleReservationPayload payload,
+        ReservationScheduler scheduler,
+        HttpContext httpContext) =>
+    {
     if (string.IsNullOrWhiteSpace(payload.ReservationId))
     {
         return Results.BadRequest(new { error = "reservationId is required" });
@@ -223,13 +293,13 @@ app.MapPost("/schedule-reservation", async (
         httpContext.RequestAborted);
 
     return Results.Ok(new { ok = true });
-});
+    });
 
-app.MapPost("/cancel-reservation", async (
-    CancelReservationPayload payload,
-    ReservationScheduler scheduler,
-    HttpContext httpContext) =>
-{
+    app.MapPost("/cancel-reservation", async (
+        CancelReservationPayload payload,
+        ReservationScheduler scheduler,
+        HttpContext httpContext) =>
+    {
     if (string.IsNullOrWhiteSpace(payload.ReservationId))
     {
         return Results.BadRequest(new { error = "reservationId is required" });
@@ -237,7 +307,8 @@ app.MapPost("/cancel-reservation", async (
 
     await scheduler.RemoveAsync(payload.ReservationId.Trim(), httpContext.RequestAborted);
     return Results.Ok(new { ok = true });
-});
+    });
+}
 
 app.MapPost("/test-beep", async (HttpContext httpContext, Channel<AnnouncementJob> channel) =>
 {
@@ -343,6 +414,10 @@ sealed class AnnouncementWorker : BackgroundService
     private readonly Channel<AnnouncementJob> _channel;
     private readonly ILogger<AnnouncementWorker> _logger;
     private readonly HttpClient _http;
+    private readonly HttpClient? _helperHttp;
+    private readonly Uri? _helperBaseUri;
+    private readonly bool _isWindowsService;
+    private readonly bool _requireHelper;
     private readonly string _soundsDir;
 
     public AnnouncementWorker(Channel<AnnouncementJob> channel, ILogger<AnnouncementWorker> logger, AnnouncerPaths paths)
@@ -351,10 +426,50 @@ sealed class AnnouncementWorker : BackgroundService
         _logger = logger;
         _soundsDir = paths.SoundsDir;
         Directory.CreateDirectory(_soundsDir);
+        _isWindowsService = WindowsServiceHelpers.IsWindowsService();
         _http = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(45),
         };
+
+        // When running as a Windows Service, per-session ducking typically cannot see the interactive user's sessions.
+        // If a user-session helper is available, forward playback jobs to it.
+        var useHelper = _isWindowsService;
+        var useHelperEnv = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_USE_HELPER")?.Trim();
+        if (!string.IsNullOrWhiteSpace(useHelperEnv))
+        {
+            useHelper = useHelperEnv.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || useHelperEnv.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || useHelperEnv.Equals("yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        _requireHelper = _isWindowsService;
+        var requireHelperEnv = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_REQUIRE_HELPER")?.Trim();
+        if (!string.IsNullOrWhiteSpace(requireHelperEnv))
+        {
+            _requireHelper = requireHelperEnv.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || requireHelperEnv.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || requireHelperEnv.Equals("yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (useHelper)
+        {
+            var helperUrl = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_HELPER_URL")?.Trim();
+            if (string.IsNullOrWhiteSpace(helperUrl))
+            {
+                helperUrl = "http://127.0.0.1:17778";
+            }
+
+            if (Uri.TryCreate(helperUrl, UriKind.Absolute, out var parsed))
+            {
+                _helperBaseUri = parsed;
+                _helperHttp = new HttpClient
+                {
+                    BaseAddress = parsed,
+                    Timeout = TimeSpan.FromSeconds(4),
+                };
+            }
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -378,6 +493,22 @@ sealed class AnnouncementWorker : BackgroundService
 
     private async Task HandleJob(AnnouncementJob job, CancellationToken ct)
     {
+        if (_helperHttp is not null && _helperBaseUri is not null)
+        {
+            if (await TryForwardToHelper(job, ct))
+            {
+                return;
+            }
+
+            if (_requireHelper)
+            {
+                _logger.LogError(
+                    "Playback helper is required but unreachable. Refusing to play in Windows Service session. helper={Helper}",
+                    _helperBaseUri);
+                return;
+            }
+        }
+
         var duckVolume = job.DuckVolumeScalar;
         if (!duckVolume.HasValue)
         {
@@ -390,14 +521,16 @@ sealed class AnnouncementWorker : BackgroundService
 
         var effectiveDuckVolume = Math.Clamp(duckVolume ?? 0.20f, 0.0f, 1.0f);
 
-        MMDevice? device = null;
         DuckingHandle? ducking = null;
         try
         {
             if (job.Duck)
             {
-                device = new MMDeviceEnumerator().GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-                ducking = DuckOtherAppSessions(device, effectiveDuckVolume, _logger);
+                _logger.LogInformation(
+                    "Ducking enabled for job. processId={Pid} sessionId={SessionId}",
+                    Environment.ProcessId,
+                    Process.GetCurrentProcess().SessionId);
+                ducking = DuckOtherAppSessionsAllRoles(effectiveDuckVolume, _logger);
             }
 
             if (job.Beep is not null)
@@ -432,22 +565,57 @@ sealed class AnnouncementWorker : BackgroundService
             {
                 _logger.LogWarning(ex, "Failed to restore ducked session volumes");
             }
-            finally
+        }
+    }
+
+    private async Task<bool> TryForwardToHelper(AnnouncementJob job, CancellationToken ct)
+    {
+        try
+        {
+            var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            for (var attempt = 1; attempt <= 3; attempt++)
             {
-                device?.Dispose();
+                using var req = new HttpRequestMessage(HttpMethod.Post, "/play-job")
+                {
+                    Content = JsonContent.Create(job, options: options),
+                };
+
+                using var resp = await _helperHttp!.SendAsync(req, ct);
+                if (resp.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Forwarded playback job to user-agent helper at {Helper} (attempt {Attempt})", _helperBaseUri, attempt);
+                    return true;
+                }
+
+                _logger.LogWarning("User-agent helper returned {StatusCode} (attempt {Attempt})", (int)resp.StatusCode, attempt);
+                await Task.Delay(TimeSpan.FromMilliseconds(250), ct);
             }
+
+            _logger.LogWarning("Failed to forward job to helper after retries; falling back to local playback");
+            return false;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to forward job to user-agent helper; falling back to local playback");
+            return false;
         }
     }
 
     private sealed class DuckingHandle : IDisposable
     {
         private readonly List<(AudioSessionControl session, float original)> _sessions;
+        private readonly List<IDisposable> _disposables;
         private readonly ILogger _logger;
         private bool _disposed;
 
-        public DuckingHandle(List<(AudioSessionControl session, float original)> sessions, ILogger logger)
+        public DuckingHandle(List<(AudioSessionControl session, float original)> sessions, List<IDisposable> disposables, ILogger logger)
         {
             _sessions = sessions;
+            _disposables = disposables;
             _logger = logger;
         }
 
@@ -478,49 +646,146 @@ sealed class AnnouncementWorker : BackgroundService
                     }
                 }
             }
+
+            for (var i = _disposables.Count - 1; i >= 0; i--)
+            {
+                try
+                {
+                    _disposables[i].Dispose();
+                }
+                catch
+                {
+                    // best-effort
+                }
+            }
         }
     }
 
-    private static DuckingHandle DuckOtherAppSessions(MMDevice device, float duckVolumeScalar, ILogger logger)
+    private static DuckingHandle DuckOtherAppSessionsAllRoles(float duckVolumeScalar, ILogger logger)
     {
-        // Duck other apps, but keep this announcer process at full volume.
+        // Duck other apps by setting per-session volumes. We try multiple default roles because
+        // some apps/devices are routed differently (Console/Multimedia/Communications).
         var currentPid = unchecked((uint)Environment.ProcessId);
         var ducked = new List<(AudioSessionControl session, float original)>();
+        var disposables = new List<IDisposable>();
+        var totalVisibleSessions = 0;
+        var totalAttemptedSessions = 0;
+        var deviceCount = 0;
+        var duckedCount = 0;
 
+        var processedDeviceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenSessions = new HashSet<nint>();
+
+        MMDeviceEnumerator? enumerator = null;
         try
         {
-            var sessionManager = device.AudioSessionManager;
-            var sessions = sessionManager.Sessions;
-            for (var i = 0; i < sessions.Count; i++)
+            enumerator = new MMDeviceEnumerator();
+            disposables.Add(enumerator);
+
+            var roles = new[] { Role.Console, Role.Multimedia, Role.Communications };
+            foreach (var role in roles)
             {
-                var session = sessions[i];
+                MMDevice? device = null;
                 try
                 {
-                    // Skip sessions we can't attribute to a process, and skip ourselves.
-                    uint pid;
+                    device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, role);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (device is null)
+                {
+                    continue;
+                }
+
+                if (!processedDeviceIds.Add(device.ID))
+                {
+                    device.Dispose();
+                    continue;
+                }
+
+                deviceCount++;
+                disposables.Add(device);
+
+                AudioSessionManager? sessionManager = null;
+                try
+                {
+                    sessionManager = device.AudioSessionManager;
+                }
+                catch
+                {
+                    continue;
+                }
+
+                // Let the compiler infer the correct NAudio session collection type.
+                var sessionCollection = sessionManager.Sessions;
+                totalVisibleSessions += sessionCollection.Count;
+
+                for (var i = 0; i < sessionCollection.Count; i++)
+                {
+                    var session = sessionCollection[i];
+                    totalAttemptedSessions++;
+
+                    nint unk = 0;
                     try
                     {
-                        pid = session.GetProcessID;
+                        unk = Marshal.GetIUnknownForObject(session);
+                        if (unk != 0 && !seenSessions.Add(unk))
+                        {
+                            session.Dispose();
+                            continue;
+                        }
                     }
                     catch
                     {
-                        pid = 0;
+                        // If we can't dedupe, proceed best-effort.
                     }
 
-                    if (pid <= 0 || pid == currentPid)
+                    try
                     {
-                        session.Dispose();
-                        continue;
-                    }
+                        uint pid;
+                        try
+                        {
+                            pid = session.GetProcessID;
+                        }
+                        catch
+                        {
+                            pid = 0;
+                        }
 
-                    var original = session.SimpleAudioVolume.Volume;
-                    ducked.Add((session, original));
-                    session.SimpleAudioVolume.Volume = duckVolumeScalar;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogDebug(ex, "Failed to duck an audio session");
-                    session.Dispose();
+                        // PID-less sessions are often "System Sounds"; ducking them can mute our own playback.
+                        if (pid <= 0)
+                        {
+                            session.Dispose();
+                            continue;
+                        }
+
+                        // Skip ourselves if we can identify it.
+                        if (pid == currentPid)
+                        {
+                            session.Dispose();
+                            continue;
+                        }
+
+                        var original = session.SimpleAudioVolume.Volume;
+                        ducked.Add((session, original));
+                        session.SimpleAudioVolume.Volume = duckVolumeScalar;
+                        duckedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogDebug(ex, "Failed to duck an audio session");
+                        session.Dispose();
+                    }
+                    finally
+                    {
+                        if (unk != 0)
+                        {
+                            try { Marshal.Release(unk); } catch { }
+                        }
+                    }
                 }
             }
         }
@@ -530,7 +795,25 @@ sealed class AnnouncementWorker : BackgroundService
             logger.LogWarning(ex, "Session ducking failed; continuing without ducking");
         }
 
-        return new DuckingHandle(ducked, logger);
+        if (duckedCount == 0)
+        {
+            logger.LogWarning(
+                "No audio sessions were ducked (devices={DeviceCount} visibleSessions={VisibleSessions} attempted={Attempted}). "+
+                "If this runs as a Windows Service, ensure the user-agent helper is running and reachable.",
+                deviceCount,
+                totalVisibleSessions,
+                totalAttemptedSessions);
+        }
+        else
+        {
+            logger.LogInformation(
+                "Ducked {DuckedCount} sessions across {DeviceCount} device(s) (duckVolumeScalar={DuckVolumeScalar})",
+                duckedCount,
+                deviceCount,
+                duckVolumeScalar);
+        }
+
+        return new DuckingHandle(ducked, disposables, logger);
     }
 
     private async Task PlayUrl(string url, CancellationToken ct)

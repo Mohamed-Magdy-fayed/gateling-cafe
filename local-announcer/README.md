@@ -30,16 +30,7 @@ The announcer persists audio files to disk so future callouts can play even with
 
 ## Onboarding (recommended)
 
-### Download the prebuilt EXE (no installs on the cafe PC)
-
-1) Create a tag that matches `announcer-v*` (example: `announcer-v1.0.0`).
-2) Push the tag to GitHub.
-3) Download `Gateling.Announcer.exe` from the GitHub Release assets.
-
-The repo includes a GitHub Actions workflow that builds this EXE on tag push:
-- `.github/workflows/local-announcer-win-x64.yml`
-
-### Maintainers only: build the EXE locally (requires .NET 8 SDK)
+### Build the EXE locally (requires .NET SDK)
 
 1) Install **.NET 8 SDK** on a dev machine:
    - https://dotnet.microsoft.com/download
@@ -56,12 +47,31 @@ The repo includes a GitHub Actions workflow that builds this EXE on tag push:
 
 4) Keep it running (startup folder / Task Scheduler is ideal).
 
+### Cafe PC setup (recommended)
+
+Copy everything from `local-announcer/dist/` onto the cafe PC (keep the EXE + installer script together), then run:
+
+- From an **Administrator** PowerShell in the same folder as `Gateling.Announcer.exe`:
+   - `powershell -ExecutionPolicy Bypass -File .\install-announcer-service.ps1`
+
+This installs:
+- A Windows Service (API + scheduler) on `http://127.0.0.1:17777`
+- A per-user Scheduled Task (interactive helper for ducking) on `http://127.0.0.1:17778`
+
+Quick checks:
+- `Invoke-RestMethod http://127.0.0.1:17777/debug`
+- `Invoke-RestMethod http://127.0.0.1:17778/debug`
+- `Invoke-RestMethod -Method Post http://127.0.0.1:17777/test-beep -ContentType 'application/json' -Body '{"duck":true,"durationMs":300}'`
+
 ## Environment variables
 
 - `GATELING_ANNOUNCER_PORT` (default `17777`)
+- `GATELING_ANNOUNCER_USER_AGENT_PORT` (default `17778`) — port used by `--user-agent`
 - `GATELING_ANNOUNCER_DUCK_VOLUME` (0.0 - 1.0, default `0.20`) — target volume for other apps during playback
 - `GATELING_ANNOUNCER_END_URL` (example: `https://YOUR_DOMAIN/api/local-announcer/end-reservation`) — server callback URL
 - `GATELING_ANNOUNCER_END_TOKEN` (shared secret) — Bearer token used for the callback
+- `GATELING_ANNOUNCER_USE_HELPER` (`true`/`false`) — when running as a Windows Service, forward playback to the user-session helper (default: `true` for services)
+- `GATELING_ANNOUNCER_HELPER_URL` (default `http://127.0.0.1:17778`) — helper base URL
 
 ## Run as a Windows Service (recommended for cafe PCs)
 
@@ -78,6 +88,7 @@ Run it once as Administrator (it will prompt for elevation if needed). It will:
 - Set machine env vars (only if missing)
 - Install + start the Windows Service
 - Configure auto-start on Windows boot
+- Create/start a Scheduled Task that runs the announcer in `--user-agent` mode (needed for reliable ducking)
 
 From an **Administrator** PowerShell in the folder containing `Gateling.Announcer.exe`:
 

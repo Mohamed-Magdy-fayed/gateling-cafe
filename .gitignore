@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local-announcer build outputs
+/local-announcer/dist/
+/local-announcer/dist-*/
+/local-announcer/Gateling.Announcer/bin/
+/local-announcer/Gateling.Announcer/obj/

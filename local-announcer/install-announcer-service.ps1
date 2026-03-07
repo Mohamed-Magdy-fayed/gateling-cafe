@@ -100,6 +100,85 @@ if (-not $svc) {
   & sc.exe config $ServiceName start= auto | Out-Null
 }
 
+# 2.5) Install/start interactive playback helper (Scheduled Task)
+# Ducking other apps' audio sessions generally requires running in the interactive user session.
+$taskName = 'GatelingAnnouncerUserAgent'
+
+# When this script is elevated, $env:USERNAME can sometimes resolve to the elevated context.
+# Prefer the currently active console user when available.
+$interactiveUser = $null
+try {
+  $interactiveUser = (Get-CimInstance Win32_ComputerSystem).UserName
+}
+catch {
+  $interactiveUser = $null
+}
+
+if ($null -eq $interactiveUser -or $interactiveUser.Trim().Length -eq 0) {
+  $interactiveUser = "$env:USERDOMAIN\$env:USERNAME"
+}
+
+$userId = $interactiveUser
+if ($userId -notmatch '\\') {
+  $domain = $env:USERDOMAIN
+  if ($null -eq $domain -or $domain.Trim().Length -eq 0) {
+    $domain = $env:COMPUTERNAME
+  }
+  $userId = "$domain\$userId"
+}
+
+try {
+  Import-Module ScheduledTasks -ErrorAction Stop
+
+  # Launch helper detached + hidden so closing terminals won't kill it.
+  # (Running the EXE directly from a console ties it to that console.)
+  $helperArgs = "--user-agent --port 17778"
+  $psCmd = "Start-Process -FilePath `"$exePath`" -ArgumentList `"$helperArgs`" -WorkingDirectory `"$here`" -WindowStyle Hidden"
+  # Use EncodedCommand to avoid fragile quoting issues in Task Scheduler.
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($psCmd))
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -EncodedCommand $encoded"
+  $trigger = New-ScheduledTaskTrigger -AtLogOn
+  # Do NOT use Highest here. Scheduled Tasks cannot show a UAC prompt; Highest often causes silent failures.
+  $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
+  $settings = New-ScheduledTaskSettingsSet -Hidden -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+  # Replace any existing task in case the EXE path or principal changed.
+  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
+  Write-Host "Scheduled Task '$taskName' installed for '$userId' (user-session helper on port 17778)."
+
+  # Best-effort verification that helper is actually listening.
+  $ok = $false
+  for ($i = 0; $i -lt 10; $i++) {
+    Start-Sleep -Milliseconds 300
+    try {
+      $null = Invoke-RestMethod http://127.0.0.1:17778/health -TimeoutSec 1
+      $ok = $true
+      break
+    }
+    catch {
+      # keep retrying
+    }
+  }
+
+  if (-not $ok) {
+    $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+    Write-Warning "User-agent helper did not start (port 17778 not reachable). Task LastTaskResult: $($info.LastTaskResult)"
+    try {
+      $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+      Write-Warning "Task Principal: $($task.Principal.UserId) LogonType=$($task.Principal.LogonType) RunLevel=$($task.Principal.RunLevel)"
+      Write-Warning "Task Action: $($task.Actions.Execute) $($task.Actions.Arguments)"
+    }
+    catch {
+      # ignore
+    }
+  }
+}
+catch {
+  Write-Warning "Failed to create/start Scheduled Task '$taskName'. Ducking may not work in service mode. Error: $($_.Exception.Message)"
+}
+
 # 3) Restart to pick up environment variables
 $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($svc) {
@@ -112,3 +191,4 @@ if ($svc) {
 
 Write-Host 'Done. The announcer service is installed and set to start automatically.'
 Write-Host 'If audio is not playing, run /test-beep against http://127.0.0.1:17777/test-beep'
+Write-Host 'If ducking is not working, ensure the user-session helper is running on http://127.0.0.1:17778/health'
