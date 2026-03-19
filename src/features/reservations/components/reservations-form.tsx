@@ -137,7 +137,7 @@ export function ReservationsForm({
             const reservationCode = await generateReservationCodeAction();
             form.setValue("reservationCode", reservationCode);
         });
-    }, [reservation, form]);
+    }, [reservation]);
 
     return (
         <Form {...form}>
