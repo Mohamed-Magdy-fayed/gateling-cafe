@@ -1,6 +1,5 @@
 "use server";
 
-import { Buffer } from "node:buffer";
 import { createHash } from "crypto";
 import {
     and,
@@ -36,7 +35,6 @@ import {
 } from "@/features/reservations/schemas";
 import { generateReservationCode } from "@/features/reservations/utils";
 import { getT } from "@/lib/i18n/actions";
-import { getFileDownloadURL, uploadFile } from "@/services/firebase/actions";
 import type { ServerActionResponse } from "@/types/server-actions";
 
 const TTS_ANNOUNCEMENT_KEY = "reservations_child_pickup";
@@ -52,28 +50,36 @@ function applyNameTemplate(template: string, name: string) {
 async function synthesizeTTSBase64ForText({
     text,
     description,
+    label,
 }: {
     text: string;
     description: string;
+    label: string;
 }) {
-    const key = createHash("sha256").update(text).digest("hex").slice(0, 16);
+    const hash = createHash("sha256").update(text).digest("hex").slice(0, 8);
+    const key = `${label}-${hash}`;
     const cacheKey = `reservation_announcement:${key}`;
 
     // Check DB cache first to avoid redundant Hume API calls
-    const cached = await db
-        .select()
-        .from(TTSCacheTable)
-        .where(eq(TTSCacheTable.text, cacheKey))
-        .limit(1);
+    try {
+        const cached = await db
+            .select()
+            .from(TTSCacheTable)
+            .where(eq(TTSCacheTable.text, cacheKey))
+            .limit(1);
 
-    if (cached.length > 0) {
-        const res = await fetch(cached[0].url);
-        const arrayBuffer = await res.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
-        return { key, base64, contentType: "audio/mpeg" as const };
+        if (cached.length > 0 && cached[0].url.startsWith("data:audio/mpeg;base64,")) {
+            console.log(`[TTS] Cache hit for "${key}"`);
+            const base64 = cached[0].url.slice("data:audio/mpeg;base64,".length);
+            return { key, base64, contentType: "audio/mpeg" as const };
+        }
+    } catch (error) {
+        console.error(`[TTS] Cache lookup failed for "${key}":`, error);
+        // Fall through to generate fresh audio
     }
 
-    // Generate via Hume API
+    console.log(`[TTS] Cache miss for "${key}", calling Hume API...`);
+
     const client = new HumeClient({ apiKey: env.HUME_API_KEY });
 
     const response = await client.tts.synthesizeJson({
@@ -92,32 +98,30 @@ async function synthesizeTTSBase64ForText({
 
     const rawAudio = response.generations[0]?.audio;
     if (!rawAudio) {
-        throw new Error("Failed to generate audio from TTS service.");
+        console.error(`[TTS] Hume returned no audio for "${key}"`);
+        throw new Error(`TTS generation failed for "${key}".`);
     }
 
     const base64Payload = rawAudio.includes(",")
         ? rawAudio.substring(rawAudio.indexOf(",") + 1)
         : rawAudio;
 
-    // Upload to Firebase and cache in DB
-    const audioBinary = Buffer.from(base64Payload, "base64");
-    const storagePath = `tts/${key}.mp3`;
+    console.log(`[TTS] Generated audio for "${key}" (${base64Payload.length} base64 chars)`);
 
-    let url: string;
+    // Cache base64 directly in DB — no external storage needed.
+    // The local announcer saves files to disk on its own.
+    const dataUri = `data:audio/mpeg;base64,${base64Payload}`;
+
     try {
-        url = await uploadFile(storagePath, audioBinary);
+        await db
+            .insert(TTSCacheTable)
+            .values({ text: cacheKey, url: dataUri })
+            .onConflictDoNothing();
+        console.log(`[TTS] Cached "${key}" in DB`);
     } catch (error) {
-        if ((error as Error).message === "File already exists at this path.") {
-            url = await getFileDownloadURL(storagePath);
-        } else {
-            throw error;
-        }
+        console.error(`[TTS] Failed to cache "${key}" in DB:`, error);
+        // Non-fatal — still return the audio
     }
-
-    await db
-        .insert(TTSCacheTable)
-        .values({ text: cacheKey, url })
-        .onConflictDoNothing();
 
     return {
         key,
@@ -153,10 +157,11 @@ async function getAnnouncementTexts(name: string) {
 
 export async function getAnnouncementTTSKeys(name: string) {
     const { textEn, textAr } = await getAnnouncementTexts(name);
+    const safeName = name.trim().replace(/[^a-zA-Z0-9\u0600-\u06FF _-]/g, "").replace(/\s+/g, "_");
 
     return {
-        enKey: createHash("sha256").update(textEn).digest("hex").slice(0, 16),
-        arKey: createHash("sha256").update(textAr).digest("hex").slice(0, 16),
+        enKey: `${safeName}-en-${createHash("sha256").update(textEn).digest("hex").slice(0, 8)}`,
+        arKey: `${safeName}-ar-${createHash("sha256").update(textAr).digest("hex").slice(0, 8)}`,
     };
 }
 
@@ -653,18 +658,25 @@ export async function updateAnnouncementTTSTemplates(input: {
 
 export async function getAnnouncementTTSAudio(name: string) {
     const { textEn, textAr } = await getAnnouncementTexts(name);
+    const safeName = name.trim().replace(/[^a-zA-Z0-9\u0600-\u06FF _-]/g, "").replace(/\s+/g, "_");
+
+    console.log(`[TTS] Generating announcement audio for "${safeName}"`);
 
     const en = await synthesizeTTSBase64ForText({
         text: textEn,
         description:
             "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in English.",
+        label: `${safeName}-en`,
     });
 
     const ar = await synthesizeTTSBase64ForText({
         text: textAr,
         description:
             "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in Arabic Egyptian.",
+        label: `${safeName}-ar`,
     });
+
+    console.log(`[TTS] Audio ready for "${safeName}" — en: ${en.key}, ar: ${ar.key}`);
 
     return {
         en,

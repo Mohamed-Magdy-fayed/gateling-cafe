@@ -109,7 +109,7 @@ app.MapGet("/", () => Results.Ok(new
     mode = isUserAgent ? "user-agent" : "service",
     endpoints = isUserAgent
         ? new[] { "/health", "/announce", "/announce-tts", "/test-beep", "/play-job" }
-        : new[] { "/health", "/announce", "/announce-tts", "/test-beep", "/schedule-reservation", "/cancel-reservation" }
+        : new[] { "/health", "/announce", "/announce-tts", "/test-beep", "/schedule-reservation", "/cancel-reservation", "/check-clips" }
 }));
 app.MapGet("/health", () => Results.Ok(new { ok = true }));
 
@@ -257,6 +257,21 @@ app.MapPost("/announce-tts", async (
 
 if (!isUserAgent)
 {
+    app.MapPost("/check-clips", (CheckClipsPayload payload, AnnouncerPaths paths) =>
+    {
+        var keys = payload.Keys ?? new List<string>();
+        var result = new Dictionary<string, bool>();
+        foreach (var raw in keys)
+        {
+            var key = (raw ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            if (key.Any(ch => !(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'))) continue;
+            var filePath = Path.Combine(paths.SoundsDir, $"{key}.mp3");
+            result[key] = File.Exists(filePath);
+        }
+        return Results.Ok(result);
+    });
+
     app.MapPost("/schedule-reservation", async (
         ScheduleReservationPayload payload,
         ReservationScheduler scheduler,
@@ -388,6 +403,8 @@ sealed record ScheduleReservationPayload(
     float? DuckVolumeScalar);
 
 sealed record CancelReservationPayload(string ReservationId);
+
+sealed record CheckClipsPayload(List<string>? Keys);
 
 sealed record AnnouncementJob(
     List<string> Urls,
