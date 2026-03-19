@@ -1,5 +1,6 @@
 "use server";
 
+import { Buffer } from "node:buffer";
 import { createHash } from "crypto";
 import {
     and,
@@ -23,6 +24,7 @@ import {
     type PlaytimeOption,
     PlaytimeOptionsTable,
 } from "@/drizzle/schemas/kids/playtime-options-table";
+import { TTSCacheTable } from "@/drizzle/schemas/kids/tts-cache-table";
 import { TTSSettingsTable } from "@/drizzle/schemas/kids/tts-settings-table";
 import { getActiveShift } from "@/features/dashboard/get-active-shift";
 import { insertOrGetCustomer } from "@/features/helpers";
@@ -34,6 +36,7 @@ import {
 } from "@/features/reservations/schemas";
 import { generateReservationCode } from "@/features/reservations/utils";
 import { getT } from "@/lib/i18n/actions";
+import { getFileDownloadURL, uploadFile } from "@/services/firebase/actions";
 import type { ServerActionResponse } from "@/types/server-actions";
 
 const TTS_ANNOUNCEMENT_KEY = "reservations_child_pickup";
@@ -53,6 +56,24 @@ async function synthesizeTTSBase64ForText({
     text: string;
     description: string;
 }) {
+    const key = createHash("sha256").update(text).digest("hex").slice(0, 16);
+    const cacheKey = `reservation_announcement:${key}`;
+
+    // Check DB cache first to avoid redundant Hume API calls
+    const cached = await db
+        .select()
+        .from(TTSCacheTable)
+        .where(eq(TTSCacheTable.text, cacheKey))
+        .limit(1);
+
+    if (cached.length > 0) {
+        const res = await fetch(cached[0].url);
+        const arrayBuffer = await res.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+        return { key, base64, contentType: "audio/mpeg" as const };
+    }
+
+    // Generate via Hume API
     const client = new HumeClient({ apiKey: env.HUME_API_KEY });
 
     const response = await client.tts.synthesizeJson({
@@ -78,7 +99,25 @@ async function synthesizeTTSBase64ForText({
         ? rawAudio.substring(rawAudio.indexOf(",") + 1)
         : rawAudio;
 
-    const key = createHash("sha256").update(text).digest("hex").slice(0, 16);
+    // Upload to Firebase and cache in DB
+    const audioBinary = Buffer.from(base64Payload, "base64");
+    const storagePath = `tts/${key}.mp3`;
+
+    let url: string;
+    try {
+        url = await uploadFile(storagePath, audioBinary);
+    } catch (error) {
+        if ((error as Error).message === "File already exists at this path.") {
+            url = await getFileDownloadURL(storagePath);
+        } else {
+            throw error;
+        }
+    }
+
+    await db
+        .insert(TTSCacheTable)
+        .values({ text: cacheKey, url })
+        .onConflictDoNothing();
 
     return {
         key,
