@@ -66,10 +66,11 @@ function scheduleWithLocalAnnouncer(payload: {
             customerName: payload.customerName,
             duck: true,
         }),
-    }).catch(() => {
+    }).catch((e) => {
         // Local service might be offline — non-fatal.
         console.warn(
-            `[Announcer] Failed to schedule reservation ${payload.reservationId}`,
+            `[Announcer] Failed to schedule reservation ${payload.reservationId}:`,
+            e,
         );
     });
 }
