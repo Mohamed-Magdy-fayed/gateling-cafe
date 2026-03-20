@@ -47,34 +47,6 @@ function applyNameTemplate(template: string, name: string) {
     return template.replaceAll("{name}", name).replaceAll("{customerName}", name);
 }
 
-const LOCAL_ANNOUNCER_URL =
-    process.env.NEXT_PUBLIC_LOCAL_ANNOUNCER_URL?.trim() ||
-    "http://127.0.0.1:17777";
-
-function scheduleWithLocalAnnouncer(payload: {
-    reservationId: string;
-    endTimeUtc: string;
-    customerName: string;
-}) {
-    // Fire-and-forget — don't block reservation creation if the local service is down.
-    fetch(`${LOCAL_ANNOUNCER_URL}/schedule-reservation`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-            reservationId: payload.reservationId,
-            endTimeUtc: payload.endTimeUtc,
-            customerName: payload.customerName,
-            duck: true,
-        }),
-    }).catch((e) => {
-        // Local service might be offline — non-fatal.
-        console.warn(
-            `[Announcer] Failed to schedule reservation ${payload.reservationId}:`,
-            e,
-        );
-    });
-}
-
 async function synthesizeTTSBase64ForText({
     text,
     description,
@@ -410,13 +382,6 @@ export async function createReservation(
             })
             .returning()
             .then((res) => res[0]);
-
-        // Schedule with local announcer — it handles TTS generation & disk caching.
-        scheduleWithLocalAnnouncer({
-            reservationId: reservation.id,
-            endTimeUtc: endTime.toISOString(),
-            customerName: reservationData.customerName.trim(),
-        });
 
         revalidatePath("/reservations");
 

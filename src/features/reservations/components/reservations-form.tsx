@@ -110,6 +110,26 @@ export function ReservationsForm({
         if (resultReservation.error) {
             toast.error(t("error", { error: resultReservation.message }));
         } else {
+            // Schedule with local announcer (client-side, since it runs on the same LAN).
+            if (!reservation && resultReservation.data) {
+                const r = resultReservation.data;
+                const announcerUrl =
+                    process.env.NEXT_PUBLIC_LOCAL_ANNOUNCER_URL?.trim() ||
+                    "http://127.0.0.1:17777";
+                fetch(`${announcerUrl}/schedule-reservation`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                        reservationId: r.id,
+                        endTimeUtc: new Date(r.endTime).toISOString(),
+                        customerName: r.customerName.trim(),
+                        duck: true,
+                    }),
+                }).catch((e) => {
+                    // Local service might be offline — non-fatal.
+                    console.warn(`[Announcer] Failed to schedule reservation ${r.id}:`, e);
+                });
+            }
             toast.success(t("success"));
             setIsOpen(false);
         }
