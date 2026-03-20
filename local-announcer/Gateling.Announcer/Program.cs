@@ -966,7 +966,7 @@ sealed class ReservationScheduler : BackgroundService
         _paths = paths;
         _announcerPaths = announcerPaths;
         _channel = channel;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
     }
 
     public override async Task StartAsync(CancellationToken cancellationToken)
@@ -982,6 +982,29 @@ sealed class ReservationScheduler : BackgroundService
         {
             // Pre-cache clips with base64 if provided
             await CacheClipsIfNeeded(reservation.Clips, ct);
+
+            // If no clips were provided or files are missing, fetch TTS from server
+            var customerName = reservation.CustomerName;
+            if (!string.IsNullOrWhiteSpace(customerName))
+            {
+                var clips = reservation.Clips;
+                var allExist = clips.Count > 0 && clips.All(c =>
+                {
+                    var k = (c.Key ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(k)) return false;
+                    return File.Exists(Path.Combine(_announcerPaths.SoundsDir, $"{k}.mp3"));
+                });
+
+                if (!allExist)
+                {
+                    var fetched = await FetchTTSFromServer(customerName, ct);
+                    if (fetched.Count > 0)
+                    {
+                        await CacheClipsIfNeeded(fetched, ct);
+                        reservation = reservation with { Clips = fetched };
+                    }
+                }
+            }
 
             _items[reservation.ReservationId] = reservation;
             await SaveAsync(ct);
@@ -1185,6 +1208,70 @@ sealed class ReservationScheduler : BackgroundService
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "End request failed");
+        }
+    }
+
+    private async Task<List<TtsClip>> FetchTTSFromServer(string customerName, CancellationToken ct)
+    {
+        var endUrl = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_END_URL")?.Trim();
+        var token = Environment.GetEnvironmentVariable("GATELING_ANNOUNCER_END_TOKEN")?.Trim();
+        if (string.IsNullOrWhiteSpace(endUrl) || string.IsNullOrWhiteSpace(token))
+        {
+            _logger.LogWarning("Cannot fetch TTS: END_URL or END_TOKEN not set");
+            return new List<TtsClip>();
+        }
+
+        // Derive generate-tts URL from end-reservation URL
+        // e.g. https://cafe.gateling.com/api/local-announcer/end-reservation
+        //   -> https://cafe.gateling.com/api/local-announcer/generate-tts
+        var baseUrl = endUrl;
+        var lastSlash = baseUrl.LastIndexOf('/');
+        if (lastSlash > 0)
+        {
+            baseUrl = baseUrl[..lastSlash];
+        }
+        var ttsUrl = $"{baseUrl}/generate-tts";
+
+        try
+        {
+            _logger.LogInformation("Fetching TTS for '{CustomerName}' from {Url}", customerName, ttsUrl);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, ttsUrl);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(new { customerName }),
+                Encoding.UTF8,
+                "application/json");
+
+            using var response = await _http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("TTS fetch failed: {Status}", (int)response.StatusCode);
+                return new List<TtsClip>();
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var doc = JsonDocument.Parse(json);
+            var clipsArray = doc.RootElement.GetProperty("clips");
+
+            var clips = new List<TtsClip>();
+            foreach (var clipElement in clipsArray.EnumerateArray())
+            {
+                var key = clipElement.GetProperty("key").GetString() ?? string.Empty;
+                var base64 = clipElement.GetProperty("base64").GetString() ?? string.Empty;
+                var contentType = clipElement.TryGetProperty("contentType", out var ct2)
+                    ? ct2.GetString() ?? "audio/mpeg"
+                    : "audio/mpeg";
+                clips.Add(new TtsClip(Key: key, Base64: base64, ContentType: contentType));
+            }
+
+            _logger.LogInformation("Fetched {Count} TTS clips for '{CustomerName}'", clips.Count, customerName);
+            return clips;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch TTS for '{CustomerName}'", customerName);
+            return new List<TtsClip>();
         }
     }
 }
