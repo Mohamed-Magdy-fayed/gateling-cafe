@@ -25,7 +25,7 @@ function normalizeTemplate(template: string) {
     return template.replace(/\s+/g, " ").trim();
 }
 
-async function getOrCreateTTSDataUriForCalloutText({
+async function getOrCreateTTSForCalloutText({
     text,
     description,
     cacheKey,
@@ -34,18 +34,20 @@ async function getOrCreateTTSDataUriForCalloutText({
     description: string;
     cacheKey: string;
 }) {
+    const hash = createHash("sha256").update(cacheKey).digest("hex").slice(0, 16);
+    const key = `callout_${hash}`;
+
     // Check DB cache — if we have a record, the audio was generated before.
-    // We still need to regenerate the base64 since we don't store it,
-    // but the cache lets us track what's been generated.
+    // The announcer should have the file on disk already.
     const cached = await db
-        .select()
+        .select({ url: TTSCacheTable.url })
         .from(TTSCacheTable)
         .where(eq(TTSCacheTable.text, cacheKey))
         .limit(1);
 
-    if (cached.length > 0 && cached[0].url.startsWith("data:audio/mpeg;base64,")) {
-        // Legacy entry with full data URI — return it directly.
-        return cached[0].url;
+    if (cached.length > 0) {
+        // Already generated — announcer has it on disk.
+        return { key, base64: null as string | null };
     }
 
     const client = new HumeClient({ apiKey: env.HUME_API_KEY });
@@ -73,30 +75,23 @@ async function getOrCreateTTSDataUriForCalloutText({
         ? rawAudio.substring(rawAudio.indexOf(",") + 1)
         : rawAudio;
 
-    const dataUri = `data:audio/mpeg;base64,${base64Payload}`;
-
-    // Record in DB that this text has been generated (store just a short key, not the full base64).
-    const fileHash = createHash("sha256")
-        .update(cacheKey)
-        .digest("hex")
-        .slice(0, 16);
-
+    // Record in DB that this text has been generated.
     try {
         await db
             .insert(TTSCacheTable)
-            .values({ text: cacheKey, url: `callout_${fileHash}` })
+            .values({ text: cacheKey, url: key })
             .onConflictDoNothing();
     } catch {
         // Non-fatal
     }
 
-    return dataUri;
+    return { key, base64: base64Payload as string | null };
 }
 
-export async function getKidsAreaCalloutTTSUrlAction(input: {
+export async function getKidsAreaCalloutTTSAction(input: {
     text: string;
     locale: "en" | "ar";
-}): Promise<ServerActionResponse<{ url: string }>> {
+}): Promise<ServerActionResponse<{ key: string; base64: string | null }>> {
     try {
         const user = await getCurrentUser({ redirectIfNotFound: true });
         const { t } = await getT();
@@ -107,7 +102,7 @@ export async function getKidsAreaCalloutTTSUrlAction(input: {
 
         const text = input.text.trim();
         if (!text) {
-            return { error: false, data: { url: "" } };
+            return { error: false, data: { key: "", base64: null } };
         }
 
         const cacheKey = `kids_area_callout:${input.locale}:${text}`;
@@ -116,13 +111,13 @@ export async function getKidsAreaCalloutTTSUrlAction(input: {
                 ? "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in Arabic Egyptian."
                 : "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in English.";
 
-        const url = await getOrCreateTTSDataUriForCalloutText({
+        const result = await getOrCreateTTSForCalloutText({
             text,
             description,
             cacheKey,
         });
 
-        return { error: false, data: { url } };
+        return { error: false, data: result };
     } catch {
         const { t } = await getT();
         return { error: true, message: t("errors.messageFailed") };

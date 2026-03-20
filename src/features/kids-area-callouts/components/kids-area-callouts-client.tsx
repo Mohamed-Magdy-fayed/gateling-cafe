@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
     getActiveKidsInAreaAction,
     getKidsAreaCalloutPhrasesAction,
-    getKidsAreaCalloutTTSUrlAction,
+    getKidsAreaCalloutTTSAction,
     saveKidsAreaCalloutPhrasesAction,
 } from "@/features/kids-area-callouts/actions";
 import type {
@@ -71,8 +71,6 @@ export function KidsAreaCalloutsClient() {
         "idle" | "copied" | "failed"
     >("idle");
     const [isSaving, startSaving] = React.useTransition();
-
-    const activeAudioRef = React.useRef<HTMLAudioElement | null>(null);
 
     const selectedKid = React.useMemo(
         () => kids.find((k) => k.reservationId === selectedReservationId) ?? null,
@@ -138,7 +136,7 @@ export function KidsAreaCalloutsClient() {
         }
 
         try {
-            const response = await getKidsAreaCalloutTTSUrlAction({
+            const response = await getKidsAreaCalloutTTSAction({
                 text: trimmed,
                 locale: locale === "ar" ? "ar" : "en",
             });
@@ -148,41 +146,19 @@ export function KidsAreaCalloutsClient() {
                 return;
             }
 
-            const url = response.data?.url;
-            if (!url) {
+            const { key, base64 } = response.data ?? {};
+            if (!key) {
                 return;
             }
 
-            if (activeAudioRef.current) {
-                activeAudioRef.current.pause();
-                activeAudioRef.current.currentTime = 0;
-                activeAudioRef.current = null;
-            }
-
-            const audio = new Audio(url);
-            activeAudioRef.current = audio;
-
-            audio.addEventListener(
-                "ended",
-                () => {
-                    if (activeAudioRef.current === audio) {
-                        activeAudioRef.current = null;
-                    }
-                },
-                { once: true },
-            );
-            audio.addEventListener(
-                "error",
-                () => {
-                    if (activeAudioRef.current === audio) {
-                        activeAudioRef.current = null;
-                    }
-                    toast.error(t("errors.messageFailed"));
-                },
-                { once: true },
-            );
-
-            await audio.play();
+            await fetch("http://127.0.0.1:17777/announce-tts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clips: [{ key, base64, contentType: "audio/mpeg" }],
+                    duck: true,
+                }),
+            });
         } catch {
             toast.error(t("errors.messageFailed"));
         }
