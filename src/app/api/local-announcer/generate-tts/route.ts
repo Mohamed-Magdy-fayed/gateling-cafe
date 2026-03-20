@@ -38,20 +38,17 @@ export async function POST(request: Request) {
     try {
         const audio = await getAnnouncementTTSAudio(customerName);
 
-        return NextResponse.json({
-            clips: [
-                {
-                    key: audio.en.key,
-                    base64: audio.en.base64,
-                    contentType: audio.en.contentType,
-                },
-                {
-                    key: audio.ar.key,
-                    base64: audio.ar.base64,
-                    contentType: audio.ar.contentType,
-                },
-            ],
-        });
+        // Only include clips that have base64 (cache misses that need downloading).
+        // If base64 is null, the DB says it was generated before — announcer should have the file.
+        const clips = [audio.en, audio.ar]
+            .filter((c) => c.base64 !== null)
+            .map((c) => ({
+                key: c.key,
+                base64: c.base64,
+                contentType: c.contentType,
+            }));
+
+        return NextResponse.json({ clips });
     } catch (error) {
         console.error("[generate-tts] Failed:", error);
         return NextResponse.json(

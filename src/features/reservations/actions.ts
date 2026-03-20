@@ -1,6 +1,5 @@
 "use server";
 
-import { createHash } from "crypto";
 import {
     and,
     between,
@@ -47,35 +46,39 @@ function applyNameTemplate(template: string, name: string) {
     return template.replaceAll("{name}", name).replaceAll("{customerName}", name);
 }
 
+/** Shared naming: lowercase, non-alphanumeric → underscore, collapse repeats. */
+function sanitizeNameForFile(name: string) {
+    return name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\u0600-\u06ff]+/g, "_")
+        .replace(/^_|_$/g, "");
+}
+
 async function synthesizeTTSBase64ForText({
     text,
     description,
-    label,
+    key,
 }: {
     text: string;
     description: string;
-    label: string;
+    key: string;
 }) {
-    const hash = createHash("sha256").update(text).digest("hex").slice(0, 8);
-    const key = `${label}-${hash}`;
-    const cacheKey = `reservation_announcement:${key}`;
-
-    // Check DB cache first to avoid redundant Hume API calls
+    // Check DB cache — if the same announcement text was generated before,
+    // the announcer should already have the file on disk.
     try {
         const cached = await db
-            .select()
+            .select({ url: TTSCacheTable.url })
             .from(TTSCacheTable)
-            .where(eq(TTSCacheTable.text, cacheKey))
+            .where(eq(TTSCacheTable.text, text))
             .limit(1);
 
-        if (cached.length > 0 && cached[0].url.startsWith("data:audio/mpeg;base64,")) {
-            console.log(`[TTS] Cache hit for "${key}"`);
-            const base64 = cached[0].url.slice("data:audio/mpeg;base64,".length);
-            return { key, base64, contentType: "audio/mpeg" as const };
+        if (cached.length > 0) {
+            console.log(`[TTS] DB cache hit for "${key}" — announcer should have this on disk`);
+            return { key, base64: null, contentType: "audio/mpeg" as const };
         }
     } catch (error) {
-        console.error(`[TTS] Cache lookup failed for "${key}":`, error);
-        // Fall through to generate fresh audio
+        console.error(`[TTS] DB cache lookup failed for "${key}":`, error);
     }
 
     console.log(`[TTS] Cache miss for "${key}", calling Hume API...`);
@@ -108,19 +111,15 @@ async function synthesizeTTSBase64ForText({
 
     console.log(`[TTS] Generated audio for "${key}" (${base64Payload.length} base64 chars)`);
 
-    // Cache base64 directly in DB — no external storage needed.
-    // The local announcer saves files to disk on its own.
-    const dataUri = `data:audio/mpeg;base64,${base64Payload}`;
-
+    // Store just the filename in DB — no base64, fits in the indexed column.
     try {
         await db
             .insert(TTSCacheTable)
-            .values({ text: cacheKey, url: dataUri })
+            .values({ text, url: key })
             .onConflictDoNothing();
-        console.log(`[TTS] Cached "${key}" in DB`);
+        console.log(`[TTS] Recorded "${key}" in DB cache`);
     } catch (error) {
-        console.error(`[TTS] Failed to cache "${key}" in DB:`, error);
-        // Non-fatal — still return the audio
+        console.error(`[TTS] Failed to record "${key}" in DB:`, error);
     }
 
     return {
@@ -156,12 +155,11 @@ async function getAnnouncementTexts(name: string) {
 }
 
 export async function getAnnouncementTTSKeys(name: string) {
-    const { textEn, textAr } = await getAnnouncementTexts(name);
-    const safeName = name.trim().replace(/[^a-zA-Z0-9\u0600-\u06FF _-]/g, "").replace(/\s+/g, "_");
+    const safeName = sanitizeNameForFile(name);
 
     return {
-        enKey: `${safeName}-en-${createHash("sha256").update(textEn).digest("hex").slice(0, 8)}`,
-        arKey: `${safeName}-ar-${createHash("sha256").update(textAr).digest("hex").slice(0, 8)}`,
+        enKey: `${safeName}_en`,
+        arKey: `${safeName}_ar`,
     };
 }
 
@@ -658,7 +656,7 @@ export async function updateAnnouncementTTSTemplates(input: {
 
 export async function getAnnouncementTTSAudio(name: string) {
     const { textEn, textAr } = await getAnnouncementTexts(name);
-    const safeName = name.trim().replace(/[^a-zA-Z0-9\u0600-\u06FF _-]/g, "").replace(/\s+/g, "_");
+    const safeName = sanitizeNameForFile(name);
 
     console.log(`[TTS] Generating announcement audio for "${safeName}"`);
 
@@ -666,14 +664,14 @@ export async function getAnnouncementTTSAudio(name: string) {
         text: textEn,
         description:
             "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in English.",
-        label: `${safeName}-en`,
+        key: `${safeName}_en`,
     });
 
     const ar = await synthesizeTTSBase64ForText({
         text: textAr,
         description:
             "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in Arabic Egyptian.",
-        label: `${safeName}-ar`,
+        key: `${safeName}_ar`,
     });
 
     console.log(`[TTS] Audio ready for "${safeName}" — en: ${en.key}, ar: ${ar.key}`);

@@ -975,28 +975,53 @@ sealed class ReservationScheduler : BackgroundService
         await base.StartAsync(cancellationToken);
     }
 
+    /// <summary>Shared naming convention — must match the server's sanitizeNameForFile.</summary>
+    private static string SanitizeNameForFile(string name)
+    {
+        var sb = new StringBuilder();
+        foreach (var ch in name.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(ch) || (ch >= '\u0600' && ch <= '\u06FF'))
+                sb.Append(ch);
+            else
+                sb.Append('_');
+        }
+
+        // Collapse multiple underscores and trim leading/trailing.
+        var result = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), "_+", "_").Trim('_');
+        return result;
+    }
+
     public async Task UpsertAsync(ScheduledReservation reservation, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
-            // Pre-cache clips with base64 if provided
-            await CacheClipsIfNeeded(reservation.Clips, ct);
-
-            // If no clips were provided or files are missing, fetch TTS from server
             var customerName = reservation.CustomerName;
             if (!string.IsNullOrWhiteSpace(customerName))
             {
-                var clips = reservation.Clips;
-                var allExist = clips.Count > 0 && clips.All(c =>
-                {
-                    var k = (c.Key ?? string.Empty).Trim();
-                    if (string.IsNullOrWhiteSpace(k)) return false;
-                    return File.Exists(Path.Combine(_announcerPaths.SoundsDir, $"{k}.mp3"));
-                });
+                var safeName = SanitizeNameForFile(customerName);
+                var enKey = $"{safeName}_en";
+                var arKey = $"{safeName}_ar";
+                var enFile = Path.Combine(_announcerPaths.SoundsDir, $"{enKey}.mp3");
+                var arFile = Path.Combine(_announcerPaths.SoundsDir, $"{arKey}.mp3");
 
-                if (!allExist)
+                if (File.Exists(enFile) && File.Exists(arFile))
                 {
+                    // Files already on disk — use them directly, no server call.
+                    _logger.LogInformation("Disk cache hit for '{CustomerName}': {EnKey}, {ArKey}", customerName, enKey, arKey);
+                    reservation = reservation with
+                    {
+                        Clips = new List<TtsClip>
+                        {
+                            new(Key: enKey, Base64: null, ContentType: "audio/mpeg"),
+                            new(Key: arKey, Base64: null, ContentType: "audio/mpeg"),
+                        }
+                    };
+                }
+                else
+                {
+                    // Files missing — fetch from server.
                     var fetched = await FetchTTSFromServer(customerName, ct);
                     if (fetched.Count > 0)
                     {
