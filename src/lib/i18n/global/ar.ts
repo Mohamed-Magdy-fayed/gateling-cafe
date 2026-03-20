@@ -5,7 +5,6 @@ import ordersAr from "@/features/orders/i18n/orders-ar";
 import productsAr from "@/features/products/i18n/products-ar";
 import reservationsAr from "@/features/reservations/i18n/reservations-ar";
 import usersAr from "@/features/users/i18n/users-ar";
-import { firebaseAr } from "@/services/firebase/i18n";
 import { dt, type LanguageMessages } from "../lib";
 
 export default {
@@ -216,5 +215,4 @@ export default {
   ...ordersAr,
   ...reservationsAr,
   ...kidsAreaCalloutsAr,
-  ...firebaseAr,
 } as const satisfies LanguageMessages;

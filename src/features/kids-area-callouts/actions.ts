@@ -1,6 +1,5 @@
 "use server";
 
-import { Buffer } from "node:buffer";
 import { createHash } from "crypto";
 import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { HumeClient } from "hume";
@@ -20,14 +19,13 @@ import type {
     KidsAreaCalloutPhraseDTO,
 } from "@/features/kids-area-callouts/types";
 import { getT } from "@/lib/i18n/actions";
-import { getFileDownloadURL, uploadFile } from "@/services/firebase/actions";
 import type { ServerActionResponse } from "@/types/server-actions";
 
 function normalizeTemplate(template: string) {
     return template.replace(/\s+/g, " ").trim();
 }
 
-async function getOrCreateTTSUrlForCalloutText({
+async function getOrCreateTTSDataUriForCalloutText({
     text,
     description,
     cacheKey,
@@ -36,13 +34,17 @@ async function getOrCreateTTSUrlForCalloutText({
     description: string;
     cacheKey: string;
 }) {
+    // Check DB cache — if we have a record, the audio was generated before.
+    // We still need to regenerate the base64 since we don't store it,
+    // but the cache lets us track what's been generated.
     const cached = await db
         .select()
         .from(TTSCacheTable)
         .where(eq(TTSCacheTable.text, cacheKey))
         .limit(1);
 
-    if (cached.length > 0) {
+    if (cached.length > 0 && cached[0].url.startsWith("data:audio/mpeg;base64,")) {
+        // Legacy entry with full data URI — return it directly.
         return cached[0].url;
     }
 
@@ -70,34 +72,25 @@ async function getOrCreateTTSUrlForCalloutText({
     const base64Payload = rawAudio.includes(",")
         ? rawAudio.substring(rawAudio.indexOf(",") + 1)
         : rawAudio;
-    const audioBinary = Buffer.from(base64Payload, "base64");
 
+    const dataUri = `data:audio/mpeg;base64,${base64Payload}`;
+
+    // Record in DB that this text has been generated (store just a short key, not the full base64).
     const fileHash = createHash("sha256")
         .update(cacheKey)
         .digest("hex")
         .slice(0, 16);
-    const storagePath = `tts/${fileHash}.mp3`;
 
-    let url: string;
     try {
-        url = await uploadFile(storagePath, audioBinary);
-    } catch (error) {
-        if ((error as Error).message === "File already exists at this path.") {
-            url = await getFileDownloadURL(storagePath);
-        } else {
-            throw error;
-        }
+        await db
+            .insert(TTSCacheTable)
+            .values({ text: cacheKey, url: `callout_${fileHash}` })
+            .onConflictDoNothing();
+    } catch {
+        // Non-fatal
     }
 
-    await db
-        .insert(TTSCacheTable)
-        .values({
-            text: cacheKey,
-            url,
-        })
-        .onConflictDoNothing();
-
-    return url;
+    return dataUri;
 }
 
 export async function getKidsAreaCalloutTTSUrlAction(input: {
@@ -123,7 +116,7 @@ export async function getKidsAreaCalloutTTSUrlAction(input: {
                 ? "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in Arabic Egyptian."
                 : "The voice is warm, clear, and professional. Speak with calm authority, as if making a public announcement in a shopping mall. Maintain a polite and reassuring tone, with natural pacing and clear pronunciation in English.";
 
-        const url = await getOrCreateTTSUrlForCalloutText({
+        const url = await getOrCreateTTSDataUriForCalloutText({
             text,
             description,
             cacheKey,

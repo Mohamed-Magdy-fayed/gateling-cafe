@@ -5,7 +5,6 @@ import ordersEn from "@/features/orders/i18n/orders-en";
 import productsEn from "@/features/products/i18n/products-en";
 import reservationsEn from "@/features/reservations/i18n/reservations-en";
 import usersEn from "@/features/users/i18n/users-en";
-import { firebaseEn } from "@/services/firebase/i18n";
 import { dt, type LanguageMessages } from "../lib";
 
 export default {
@@ -216,5 +215,4 @@ export default {
   ...ordersEn,
   ...reservationsEn,
   ...kidsAreaCalloutsEn,
-  ...firebaseEn,
 } as const satisfies LanguageMessages;
